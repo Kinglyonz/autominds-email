@@ -172,7 +172,7 @@ async def auth_google_callback(code: str, state: str = ""):
             localStorage.setItem('autominds_user_id', '{user.id}');
             localStorage.setItem('autominds_email', '{account.email}');
             localStorage.setItem('autominds_name', '{account.display_name or account.email}');
-            window.location.href = '/#dashboard';
+            window.location.href = '/static/dashboard.html';
         </script>
         </head><body style="background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;text-align:center;padding-top:100px;">
         <p>Connecting... redirecting to dashboard.</p>
