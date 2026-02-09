@@ -85,11 +85,17 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://autominds.org", "http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["https://autominds.org", "http://localhost:3000", "http://localhost:5173", "https://autominds-email-production.up.railway.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from fastapi.staticfiles import StaticFiles
+import pathlib
+STATIC_DIR = pathlib.Path(__file__).parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # ─── In-memory draft store (per-session) ─────────────────
@@ -114,47 +120,11 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Landing page — redirects to connect or shows status."""
-    return HTMLResponse(content=f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>AutoMinds Email Assistant</title>
-        <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                   max-width: 600px; margin: 80px auto; padding: 0 20px;
-                   background: #0a0a0a; color: #e0e0e0; }}
-            h1 {{ color: #00d4ff; }}
-            a {{ color: #00d4ff; text-decoration: none; }}
-            a:hover {{ text-decoration: underline; }}
-            .btn {{ display: inline-block; padding: 12px 24px; background: #00d4ff;
-                   color: #000; border-radius: 8px; font-weight: 600;
-                   margin: 8px 4px; }}
-            .btn:hover {{ background: #00b8e6; text-decoration: none; }}
-            .btn.outline {{ background: transparent; border: 2px solid #00d4ff; color: #00d4ff; }}
-            .status {{ padding: 12px; background: #1a1a2e; border-radius: 8px; margin: 16px 0; }}
-        </style>
-    </head>
-    <body>
-        <h1>AutoMinds Email Assistant</h1>
-        <p>AI-powered email management. Connect your inbox, get daily briefings, draft replies with AI.</p>
-
-        <div class="status">
-            <strong>Status:</strong> Running<br>
-            <strong>Uptime:</strong> {round(time.time() - START_TIME)}s<br>
-            <strong>Users:</strong> {len(user_store.list_all_users())}
-        </div>
-
-        <h3>Connect Your Email</h3>
-        <a class="btn" href="/auth/google">Connect Gmail</a>
-        {'<a class="btn outline" href="/auth/microsoft">Connect Outlook</a>' if settings.ms_client_id else ''}
-
-        <h3>API Docs</h3>
-        <p><a href="/docs">Interactive API Documentation (Swagger)</a></p>
-        <p><a href="/redoc">ReDoc API Documentation</a></p>
-    </body>
-    </html>
-    """)
+    """Landing page — shows connect or dashboard."""
+    dashboard_path = STATIC_DIR / "index.html"
+    if dashboard_path.exists():
+        return HTMLResponse(content=dashboard_path.read_text(encoding="utf-8"))
+    return RedirectResponse("/docs")
 
 
 # ══════════════════════════════════════════════════════════
@@ -194,35 +164,19 @@ async def auth_google_callback(code: str, state: str = ""):
 
         logger.info(f"Gmail connected: {account.email} (user_id={user.id})")
 
+        # Redirect to dashboard with user_id stored
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Connected!</title>
-            <style>
-                body {{ font-family: -apple-system, sans-serif; max-width: 500px;
-                       margin: 80px auto; text-align: center; background: #0a0a0a; color: #e0e0e0; }}
-                .success {{ color: #00ff88; font-size: 48px; }}
-                a {{ color: #00d4ff; }}
-                .info {{ background: #1a1a2e; padding: 16px; border-radius: 8px; margin: 16px 0; text-align: left; }}
-            </style>
-        </head>
-        <body>
-            <div class="success">✓</div>
-            <h1>Gmail Connected!</h1>
-            <div class="info">
-                <strong>Email:</strong> {account.email}<br>
-                <strong>User ID:</strong> {user.id}<br>
-                <strong>Daily Briefing:</strong> {user.settings.briefing_time} ET
-            </div>
-            <p>Your AI email assistant is now active.</p>
-            <p><a href="/emails?user_id={user.id}">View your emails</a> |
-               <a href="/briefing?user_id={user.id}">Generate briefing now</a></p>
-            <p style="margin-top: 32px; font-size: 12px; color: #666;">
-                Save your user ID: <code>{user.id}</code> — you'll need it for API calls.
-            </p>
-        </body>
-        </html>
+        <html><head><title>Connected!</title>
+        <script>
+            localStorage.setItem('autominds_user_id', '{user.id}');
+            localStorage.setItem('autominds_email', '{account.email}');
+            localStorage.setItem('autominds_name', '{account.display_name or account.email}');
+            window.location.href = '/#dashboard';
+        </script>
+        </head><body style="background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;text-align:center;padding-top:100px;">
+        <p>Connecting... redirecting to dashboard.</p>
+        </body></html>
         """)
 
     except Exception as e:
