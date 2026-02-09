@@ -1,0 +1,937 @@
+"""
+AutoMinds Email Assistant - Main Server
+FastAPI application with OAuth flows, email endpoints, and briefing generation.
+
+Run: uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+"""
+
+import logging
+import time
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+
+from config import settings
+from models import (
+    EmailProvider, EmailPriority, EmailCategory,
+    BriefingRequest, DraftRequest, DraftApproval, SendRequest,
+    AutoSendRuleRequest, HealthResponse, UserSettings,
+    DraftStatus,
+)
+import user_store
+import gmail_provider
+import outlook_provider
+import email_brain
+import scheduler
+import autonomous_agent
+
+# ─── Logging ─────────────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("autominds-email")
+
+# ─── App startup/shutdown ────────────────────────────────
+
+START_TIME = time.time()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown logic."""
+    logger.info("AutoMinds Email Assistant starting up...")
+    scheduler.start_scheduler()
+
+    # Start the autonomous agent (hourly email scanner)
+    if settings.agent_enabled:
+        autonomous_agent.schedule_agent(interval_minutes=settings.agent_interval_minutes)
+        logger.info(f"Autonomous agent enabled (every {settings.agent_interval_minutes} min)")
+
+    # Re-schedule briefings for all existing users
+    for user in user_store.list_all_users():
+        if user.connected_accounts:
+            try:
+                parts = user.settings.briefing_time.split(":")
+                hour = int(parts[0])
+                minute = int(parts[1]) if len(parts) > 1 else 0
+                scheduler.schedule_user_briefing(
+                    user.id, hour=hour, minute=minute,
+                    timezone=user.settings.briefing_timezone,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to schedule briefing for {user.id}: {e}")
+
+    logger.info("Ready to serve requests")
+    yield
+    logger.info("Shutting down...")
+    scheduler.stop_scheduler()
+
+
+# ─── FastAPI App ─────────────────────────────────────────
+
+app = FastAPI(
+    title="AutoMinds Email Assistant",
+    description="AI-powered email management — connect Gmail or Outlook, get daily briefings, draft replies.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://autominds.org", "http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ─── In-memory draft store (per-session) ─────────────────
+
+_drafts: dict[str, dict] = {}  # draft_id -> draft dict
+
+
+# ─── Health / Root ───────────────────────────────────────
+
+@app.get("/health", response_model=HealthResponse)
+async def health():
+    """Health check endpoint."""
+    all_users = user_store.list_all_users()
+    total_accounts = sum(len(u.connected_accounts) for u in all_users)
+    return HealthResponse(
+        status="ok",
+        version="1.0.0",
+        connected_accounts=total_accounts,
+        uptime_seconds=round(time.time() - START_TIME, 1),
+    )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Landing page — redirects to connect or shows status."""
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>AutoMinds Email Assistant</title>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   max-width: 600px; margin: 80px auto; padding: 0 20px;
+                   background: #0a0a0a; color: #e0e0e0; }}
+            h1 {{ color: #00d4ff; }}
+            a {{ color: #00d4ff; text-decoration: none; }}
+            a:hover {{ text-decoration: underline; }}
+            .btn {{ display: inline-block; padding: 12px 24px; background: #00d4ff;
+                   color: #000; border-radius: 8px; font-weight: 600;
+                   margin: 8px 4px; }}
+            .btn:hover {{ background: #00b8e6; text-decoration: none; }}
+            .btn.outline {{ background: transparent; border: 2px solid #00d4ff; color: #00d4ff; }}
+            .status {{ padding: 12px; background: #1a1a2e; border-radius: 8px; margin: 16px 0; }}
+        </style>
+    </head>
+    <body>
+        <h1>AutoMinds Email Assistant</h1>
+        <p>AI-powered email management. Connect your inbox, get daily briefings, draft replies with AI.</p>
+
+        <div class="status">
+            <strong>Status:</strong> Running<br>
+            <strong>Uptime:</strong> {round(time.time() - START_TIME)}s<br>
+            <strong>Users:</strong> {len(user_store.list_all_users())}
+        </div>
+
+        <h3>Connect Your Email</h3>
+        <a class="btn" href="/auth/google">Connect Gmail</a>
+        {'<a class="btn outline" href="/auth/microsoft">Connect Outlook</a>' if settings.ms_client_id else ''}
+
+        <h3>API Docs</h3>
+        <p><a href="/docs">Interactive API Documentation (Swagger)</a></p>
+        <p><a href="/redoc">ReDoc API Documentation</a></p>
+    </body>
+    </html>
+    """)
+
+
+# ══════════════════════════════════════════════════════════
+# AUTH ROUTES — OAuth flows for Gmail and Outlook
+# ══════════════════════════════════════════════════════════
+
+@app.get("/auth/google")
+async def auth_google():
+    """Start the Google OAuth flow — redirects user to Google consent screen."""
+    state = str(uuid.uuid4())[:8]
+    auth_url = gmail_provider.get_google_auth_url(state=state)
+    return RedirectResponse(auth_url)
+
+
+@app.get("/auth/google/callback")
+async def auth_google_callback(code: str, state: str = ""):
+    """Google OAuth callback — exchanges code for tokens, creates/updates user."""
+    try:
+        account = gmail_provider.exchange_google_code(code)
+
+        # Find or create user
+        user = user_store.get_user_by_email(account.email)
+        if not user:
+            user = user_store.create_user(email=account.email, name=account.display_name)
+
+        # Add/update connected account
+        user = user_store.add_connected_account(user.id, account)
+
+        # Schedule daily briefing
+        parts = user.settings.briefing_time.split(":")
+        scheduler.schedule_user_briefing(
+            user.id,
+            hour=int(parts[0]),
+            minute=int(parts[1]) if len(parts) > 1 else 0,
+            timezone=user.settings.briefing_timezone,
+        )
+
+        logger.info(f"Gmail connected: {account.email} (user_id={user.id})")
+
+        return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Connected!</title>
+            <style>
+                body {{ font-family: -apple-system, sans-serif; max-width: 500px;
+                       margin: 80px auto; text-align: center; background: #0a0a0a; color: #e0e0e0; }}
+                .success {{ color: #00ff88; font-size: 48px; }}
+                a {{ color: #00d4ff; }}
+                .info {{ background: #1a1a2e; padding: 16px; border-radius: 8px; margin: 16px 0; text-align: left; }}
+            </style>
+        </head>
+        <body>
+            <div class="success">✓</div>
+            <h1>Gmail Connected!</h1>
+            <div class="info">
+                <strong>Email:</strong> {account.email}<br>
+                <strong>User ID:</strong> {user.id}<br>
+                <strong>Daily Briefing:</strong> {user.settings.briefing_time} ET
+            </div>
+            <p>Your AI email assistant is now active.</p>
+            <p><a href="/emails?user_id={user.id}">View your emails</a> |
+               <a href="/briefing?user_id={user.id}">Generate briefing now</a></p>
+            <p style="margin-top: 32px; font-size: 12px; color: #666;">
+                Save your user ID: <code>{user.id}</code> — you'll need it for API calls.
+            </p>
+        </body>
+        </html>
+        """)
+
+    except Exception as e:
+        logger.error(f"Google OAuth callback error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"OAuth error: {str(e)}")
+
+
+@app.get("/auth/microsoft")
+async def auth_microsoft():
+    """Start the Microsoft OAuth flow."""
+    if not settings.ms_client_id:
+        raise HTTPException(status_code=501, detail="Outlook integration not configured yet")
+
+    state = str(uuid.uuid4())[:8]
+    auth_url = outlook_provider.get_microsoft_auth_url(state=state)
+    return RedirectResponse(auth_url)
+
+
+@app.get("/auth/microsoft/callback")
+async def auth_microsoft_callback(code: str, state: str = ""):
+    """Microsoft OAuth callback."""
+    try:
+        account = outlook_provider.exchange_microsoft_code(code)
+
+        user = user_store.get_user_by_email(account.email)
+        if not user:
+            user = user_store.create_user(email=account.email, name=account.display_name)
+
+        user = user_store.add_connected_account(user.id, account)
+
+        parts = user.settings.briefing_time.split(":")
+        scheduler.schedule_user_briefing(
+            user.id,
+            hour=int(parts[0]),
+            minute=int(parts[1]) if len(parts) > 1 else 0,
+            timezone=user.settings.briefing_timezone,
+        )
+
+        logger.info(f"Outlook connected: {account.email} (user_id={user.id})")
+
+        return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>Connected!</title>
+        <style>body {{ font-family: sans-serif; max-width: 500px; margin: 80px auto;
+               text-align: center; background: #0a0a0a; color: #e0e0e0; }}
+               .success {{ color: #00ff88; font-size: 48px; }}
+               a {{ color: #00d4ff; }}</style></head>
+        <body>
+            <div class="success">✓</div>
+            <h1>Outlook Connected!</h1>
+            <p><strong>Email:</strong> {account.email}</p>
+            <p><strong>User ID:</strong> {user.id}</p>
+            <p><a href="/emails?user_id={user.id}">View your emails</a> |
+               <a href="/briefing?user_id={user.id}">Generate briefing</a></p>
+        </body></html>
+        """)
+
+    except Exception as e:
+        logger.error(f"Microsoft OAuth callback error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"OAuth error: {str(e)}")
+
+
+# ══════════════════════════════════════════════════════════
+# EMAIL ROUTES — Fetch, read, categorize
+# ══════════════════════════════════════════════════════════
+
+@app.get("/emails")
+async def get_emails(
+    user_id: str,
+    max_results: int = Query(default=20, le=50),
+    unread_only: bool = True,
+    analyze: bool = True,
+):
+    """Fetch emails for a user from all connected accounts.
+    
+    Set analyze=true (default) to get AI-powered priority, category, and summary for each email.
+    """
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.connected_accounts:
+        raise HTTPException(status_code=400, detail="No email accounts connected")
+
+    all_emails = []
+
+    for account in user.connected_accounts:
+        if not account.is_active:
+            continue
+
+        if account.provider == EmailProvider.GMAIL:
+            query = "is:unread" if unread_only else ""
+            emails = gmail_provider.fetch_emails(account, query=query, max_results=max_results)
+        elif account.provider == EmailProvider.OUTLOOK:
+            emails = outlook_provider.fetch_emails(account, unread_only=unread_only, max_results=max_results)
+        else:
+            continue
+
+        all_emails.extend(emails)
+
+        # Update stored tokens if they were refreshed
+        user_store.add_connected_account(user_id, account)
+
+    # Sort by date, newest first
+    all_emails.sort(key=lambda e: e.date, reverse=True)
+
+    # Trim to max_results
+    all_emails = all_emails[:max_results]
+
+    # Analyze with Claude if requested
+    if analyze and all_emails:
+        all_emails = email_brain.analyze_emails(
+            all_emails,
+            vip_contacts=user.settings.vip_contacts,
+        )
+
+    return {
+        "user_id": user_id,
+        "count": len(all_emails),
+        "emails": [e.model_dump() for e in all_emails],
+    }
+
+
+@app.get("/emails/{email_id}")
+async def get_email(user_id: str, email_id: str):
+    """Get a single email by ID."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    for account in user.connected_accounts:
+        if account.provider == EmailProvider.GMAIL:
+            email = gmail_provider.fetch_email_by_id(account, email_id)
+        elif account.provider == EmailProvider.OUTLOOK:
+            email = outlook_provider.fetch_email_by_id(account, email_id)
+        else:
+            continue
+
+        if email:
+            return email.model_dump()
+
+    raise HTTPException(status_code=404, detail="Email not found")
+
+
+# ══════════════════════════════════════════════════════════
+# BRIEFING ROUTES — Daily email briefing
+# ══════════════════════════════════════════════════════════
+
+@app.get("/briefing")
+async def get_briefing(
+    user_id: str,
+    max_emails: int = Query(default=25, le=50),
+    force_new: bool = False,
+):
+    """Generate or retrieve the daily email briefing.
+    
+    If a briefing was already generated today, returns the cached version.
+    Set force_new=true to regenerate.
+    """
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.connected_accounts:
+        raise HTTPException(status_code=400, detail="No email accounts connected")
+
+    # Check for cached briefing
+    if not force_new:
+        cached = scheduler.get_latest_briefing(user_id)
+        if cached:
+            # Check if it's from today
+            cached_date = cached.get("date", "")
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            if today in str(cached_date):
+                return cached
+
+    # Generate fresh briefing
+    all_emails = []
+    for account in user.connected_accounts:
+        if not account.is_active:
+            continue
+        if account.provider == EmailProvider.GMAIL:
+            emails = gmail_provider.fetch_emails(account, query="is:unread", max_results=max_emails)
+        elif account.provider == EmailProvider.OUTLOOK:
+            emails = outlook_provider.fetch_emails(account, unread_only=True, max_results=max_emails)
+        else:
+            continue
+        all_emails.extend(emails)
+        user_store.add_connected_account(user_id, account)
+
+    if not all_emails:
+        return {
+            "user_id": user_id,
+            "total_unread": 0,
+            "full_text": "🎉 Inbox zero! No unread emails.",
+            "emails_analyzed": 0,
+        }
+
+    # Analyze
+    analyzed = email_brain.analyze_emails(all_emails, vip_contacts=user.settings.vip_contacts)
+
+    # Generate briefing
+    briefing = email_brain.generate_briefing(analyzed, user_name=user.name)
+    briefing.user_id = user_id
+
+    # Cache it
+    scheduler._store_briefing(user_id, briefing)
+
+    return briefing.model_dump()
+
+
+# ══════════════════════════════════════════════════════════
+# DRAFT ROUTES — AI draft replies
+# ══════════════════════════════════════════════════════════
+
+@app.post("/drafts")
+async def create_draft(user_id: str, request: DraftRequest):
+    """Generate an AI draft reply to an email.
+    
+    The draft is NOT sent automatically — user must approve it first.
+    """
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Find the original email
+    original = None
+    source_account = None
+    for account in user.connected_accounts:
+        if account.provider == EmailProvider.GMAIL:
+            original = gmail_provider.fetch_email_by_id(account, request.email_id)
+        elif account.provider == EmailProvider.OUTLOOK:
+            original = outlook_provider.fetch_email_by_id(account, request.email_id)
+
+        if original:
+            source_account = account
+            break
+
+    if not original:
+        raise HTTPException(status_code=404, detail="Original email not found")
+
+    # Generate draft
+    draft = email_brain.draft_reply(
+        original_email=original,
+        instructions=request.instructions,
+        tone=request.tone,
+        user_name=user.name,
+    )
+
+    # Check auto-send rules
+    if original.sender.email.lower() in [c.lower() for c in user.settings.auto_send_contacts]:
+        draft.status = DraftStatus.AUTO_SENT
+        # Actually send it
+        if source_account.provider == EmailProvider.GMAIL:
+            gmail_provider.send_email(
+                source_account, draft.to, draft.subject, draft.body,
+                reply_to_id=original.id,
+            )
+        elif source_account.provider == EmailProvider.OUTLOOK:
+            outlook_provider.send_email(
+                source_account, draft.to, draft.subject, draft.body,
+                reply_to_id=original.id,
+            )
+        logger.info(f"Auto-sent reply to {draft.to} (auto-send rule)")
+
+    # Store the draft
+    _drafts[draft.id] = {
+        "draft": draft.model_dump(),
+        "user_id": user_id,
+        "source_provider": source_account.provider.value,
+        "source_email": source_account.email,
+    }
+
+    return {
+        "draft": draft.model_dump(),
+        "auto_sent": draft.status == DraftStatus.AUTO_SENT,
+        "message": "Draft auto-sent (auto-send enabled for this contact)"
+                   if draft.status == DraftStatus.AUTO_SENT
+                   else "Draft created — review and approve to send.",
+    }
+
+
+@app.get("/drafts")
+async def list_drafts(user_id: str):
+    """List all pending drafts for a user."""
+    user_drafts = [
+        v["draft"] for v in _drafts.values()
+        if v["user_id"] == user_id
+    ]
+    return {"user_id": user_id, "count": len(user_drafts), "drafts": user_drafts}
+
+
+@app.post("/drafts/{draft_id}/approve")
+async def approve_draft(user_id: str, draft_id: str, edited_body: Optional[str] = None):
+    """Approve and send a draft reply.
+    
+    Optionally provide edited_body to modify the draft before sending.
+    """
+    if draft_id not in _drafts:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    draft_data = _drafts[draft_id]
+    if draft_data["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your draft")
+
+    draft = draft_data["draft"]
+    body = edited_body or draft["body"]
+
+    # Find the source account
+    user = user_store.get_user(user_id)
+    source_account = None
+    for account in user.connected_accounts:
+        if account.email == draft_data["source_email"]:
+            source_account = account
+            break
+
+    if not source_account:
+        raise HTTPException(status_code=400, detail="Source email account not found")
+
+    # Send the email
+    success = False
+    if source_account.provider == EmailProvider.GMAIL:
+        success = gmail_provider.send_email(
+            source_account, draft["to"], draft["subject"], body,
+            reply_to_id=draft["original_email_id"],
+        )
+    elif source_account.provider == EmailProvider.OUTLOOK:
+        success = outlook_provider.send_email(
+            source_account, draft["to"], draft["subject"], body,
+            reply_to_id=draft["original_email_id"],
+        )
+
+    if success:
+        draft["status"] = DraftStatus.SENT.value
+        _drafts[draft_id]["draft"] = draft
+        return {"status": "sent", "to": draft["to"], "subject": draft["subject"]}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+
+@app.post("/drafts/{draft_id}/reject")
+async def reject_draft(user_id: str, draft_id: str):
+    """Reject/discard a draft."""
+    if draft_id not in _drafts:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if _drafts[draft_id]["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your draft")
+
+    _drafts[draft_id]["draft"]["status"] = DraftStatus.REJECTED.value
+    return {"status": "rejected", "draft_id": draft_id}
+
+
+# ══════════════════════════════════════════════════════════
+# SEND ROUTE — Direct email sending
+# ══════════════════════════════════════════════════════════
+
+@app.post("/send")
+async def send_email_route(user_id: str, request: SendRequest):
+    """Send a new email (not a reply)."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.connected_accounts:
+        raise HTTPException(status_code=400, detail="No email accounts connected")
+
+    # Use the first active account
+    account = next((a for a in user.connected_accounts if a.is_active), None)
+    if not account:
+        raise HTTPException(status_code=400, detail="No active email account")
+
+    if account.provider == EmailProvider.GMAIL:
+        success = gmail_provider.send_email(
+            account, request.to, request.subject, request.body,
+            reply_to_id=request.reply_to_id,
+        )
+    elif account.provider == EmailProvider.OUTLOOK:
+        success = outlook_provider.send_email(
+            account, request.to, request.subject, request.body,
+            reply_to_id=request.reply_to_id,
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {account.provider}")
+
+    if success:
+        return {"status": "sent", "to": request.to, "subject": request.subject}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+
+# ══════════════════════════════════════════════════════════
+# USER SETTINGS ROUTES
+# ══════════════════════════════════════════════════════════
+
+@app.get("/user")
+async def get_user_info(user_id: str):
+    """Get user info and settings."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "tier": user.tier,
+        "connected_accounts": [
+            {
+                "provider": a.provider.value,
+                "email": a.email,
+                "display_name": a.display_name,
+                "is_active": a.is_active,
+                "connected_at": str(a.connected_at),
+            }
+            for a in user.connected_accounts
+        ],
+        "settings": user.settings.model_dump(),
+        "created_at": str(user.created_at),
+    }
+
+
+@app.put("/user/settings")
+async def update_settings(user_id: str, new_settings: UserSettings):
+    """Update user settings (VIP contacts, briefing time, tone, etc.)."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user = user_store.update_user_settings(user_id, new_settings)
+
+    # Reschedule briefing with new time
+    parts = new_settings.briefing_time.split(":")
+    scheduler.schedule_user_briefing(
+        user_id,
+        hour=int(parts[0]),
+        minute=int(parts[1]) if len(parts) > 1 else 0,
+        timezone=new_settings.briefing_timezone,
+    )
+
+    return {"status": "updated", "settings": user.settings.model_dump()}
+
+
+@app.post("/user/vip")
+async def add_vip_contact(user_id: str, contact_email: str):
+    """Add a VIP contact (always treated as high priority)."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if contact_email not in user.settings.vip_contacts:
+        user.settings.vip_contacts.append(contact_email)
+        user_store.save_user(user)
+
+    return {"vip_contacts": user.settings.vip_contacts}
+
+
+@app.delete("/user/vip")
+async def remove_vip_contact(user_id: str, contact_email: str):
+    """Remove a VIP contact."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.settings.vip_contacts = [
+        c for c in user.settings.vip_contacts if c.lower() != contact_email.lower()
+    ]
+    user_store.save_user(user)
+
+    return {"vip_contacts": user.settings.vip_contacts}
+
+
+@app.post("/user/auto-send")
+async def update_auto_send(user_id: str, rule: AutoSendRuleRequest):
+    """Enable or disable auto-send for a specific contact.
+    
+    When auto-send is enabled for a contact, AI-drafted replies are sent
+    immediately without requiring manual approval.
+    """
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if rule.enabled:
+        if rule.contact_email not in user.settings.auto_send_contacts:
+            user.settings.auto_send_contacts.append(rule.contact_email)
+    else:
+        user.settings.auto_send_contacts = [
+            c for c in user.settings.auto_send_contacts
+            if c.lower() != rule.contact_email.lower()
+        ]
+
+    user_store.save_user(user)
+
+    return {
+        "auto_send_contacts": user.settings.auto_send_contacts,
+        "message": f"Auto-send {'enabled' if rule.enabled else 'disabled'} for {rule.contact_email}",
+    }
+
+
+# ══════════════════════════════════════════════════════════
+# ADMIN / DEBUG ROUTES
+# ══════════════════════════════════════════════════════════
+
+@app.get("/admin/users")
+async def admin_list_users():
+    """List all users (admin endpoint)."""
+    users = user_store.list_all_users()
+    return {
+        "count": len(users),
+        "users": [
+            {
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "tier": u.tier,
+                "accounts": len(u.connected_accounts),
+                "created_at": str(u.created_at),
+            }
+            for u in users
+        ],
+    }
+
+
+@app.get("/admin/scheduler")
+async def admin_scheduler_status():
+    """Check scheduler status and list scheduled jobs."""
+    return {
+        "jobs": scheduler.list_scheduled_jobs(),
+    }
+
+
+# ══════════════════════════════════════════════════════════
+# EMAIL ACTIONS — Mark read, label, etc.
+# ══════════════════════════════════════════════════════════
+
+@app.post("/emails/{email_id}/read")
+async def mark_email_read(user_id: str, email_id: str):
+    """Mark an email as read."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    for account in user.connected_accounts:
+        if account.provider == EmailProvider.GMAIL:
+            success = gmail_provider.mark_as_read(account, email_id)
+            if success:
+                return {"status": "marked_read", "email_id": email_id}
+        elif account.provider == EmailProvider.OUTLOOK:
+            success = outlook_provider.mark_as_read(account, email_id)
+            if success:
+                return {"status": "marked_read", "email_id": email_id}
+
+    raise HTTPException(status_code=404, detail="Email not found or couldn't mark as read")
+
+
+@app.post("/emails/{email_id}/label")
+async def label_email(user_id: str, email_id: str, label: str):
+    """Add a label/category to an email (Gmail only for now)."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    for account in user.connected_accounts:
+        if account.provider == EmailProvider.GMAIL:
+            success = gmail_provider.add_label(account, email_id, label)
+            if success:
+                return {"status": "labeled", "email_id": email_id, "label": label}
+
+    raise HTTPException(status_code=400, detail="Labeling only supported for Gmail accounts")
+
+
+# ══════════════════════════════════════════════════════════
+# GOOGLE TASKS — Create / list / complete tasks from emails
+# ══════════════════════════════════════════════════════════
+
+import google_tasks_provider
+import google_contacts_provider
+
+
+@app.get("/tasks")
+async def list_tasks(user_id: str):
+    """List pending Google Tasks created from emails."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    gmail_account = _get_gmail_account(user)
+    if not gmail_account:
+        raise HTTPException(status_code=400, detail="No Gmail connected — Tasks require Gmail OAuth")
+
+    tasks = google_tasks_provider.list_pending_tasks(gmail_account)
+    return {"tasks": tasks, "count": len(tasks)}
+
+
+@app.post("/tasks/from-email")
+async def create_task_from_email(
+    user_id: str,
+    email_id: str,
+    title: str,
+    notes: str = "",
+    due_date: str | None = None,
+):
+    """Create a Google Task from an email — the agent does this automatically but users can trigger manually."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    gmail_account = _get_gmail_account(user)
+    if not gmail_account:
+        raise HTTPException(status_code=400, detail="No Gmail connected")
+
+    task = google_tasks_provider.create_task_from_email(
+        account=gmail_account,
+        title=title,
+        notes=notes,
+        due_date=due_date,
+        email_id=email_id,
+    )
+    if task:
+        return {"status": "created", "task": task}
+    raise HTTPException(status_code=500, detail="Failed to create task")
+
+
+@app.post("/tasks/{task_id}/complete")
+async def complete_task(user_id: str, task_id: str):
+    """Mark a Google Task as completed."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    gmail_account = _get_gmail_account(user)
+    if not gmail_account:
+        raise HTTPException(status_code=400, detail="No Gmail connected")
+
+    success = google_tasks_provider.complete_task(gmail_account, task_id)
+    if success:
+        return {"status": "completed", "task_id": task_id}
+    raise HTTPException(status_code=500, detail="Failed to complete task")
+
+
+# ══════════════════════════════════════════════════════════
+# CONTACTS — CRM-style lookup
+# ══════════════════════════════════════════════════════════
+
+@app.get("/contacts/{email}")
+async def lookup_contact(user_id: str, email: str):
+    """Look up a contact by email address — CRM-style enrichment."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    gmail_account = _get_gmail_account(user)
+    if not gmail_account:
+        raise HTTPException(status_code=400, detail="No Gmail connected")
+
+    contact = google_contacts_provider.lookup_contact(gmail_account, email)
+    if contact:
+        return {"contact": contact, "found": True}
+    return {"contact": None, "found": False, "email": email}
+
+
+# ══════════════════════════════════════════════════════════
+# AUTONOMOUS AGENT — Status & manual trigger
+# ══════════════════════════════════════════════════════════
+
+@app.get("/agent/status")
+async def agent_status():
+    """Get the autonomous agent's current status and recent run history."""
+    return {
+        "enabled": settings.agent_enabled,
+        "interval_minutes": settings.agent_interval_minutes,
+        "status": autonomous_agent.get_agent_status(),
+    }
+
+
+@app.post("/agent/run-now")
+async def agent_run_now(user_id: str | None = None):
+    """Trigger an immediate agent cycle — runs for one user or all users."""
+    if user_id:
+        user = user_store.get_user(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        result = await autonomous_agent.run_agent_for_user(user_id)
+        return {"status": "completed", "user_id": user_id, "result": result}
+    else:
+        results = await autonomous_agent.run_agent_for_all_users()
+        return {"status": "completed", "users_processed": len(results), "results": results}
+
+
+# ══════════════════════════════════════════════════════════
+# HELPER — Get Gmail account from user
+# ══════════════════════════════════════════════════════════
+
+def _get_gmail_account(user):
+    """Extract the Gmail connected account from a user, or None."""
+    for account in user.connected_accounts:
+        if account.provider == EmailProvider.GMAIL:
+            return account
+    return None
+
+
+# ──────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "server:app",
+        host=settings.app_host,
+        port=settings.app_port,
+        reload=(settings.app_env == "development"),
+    )

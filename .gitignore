@@ -1,0 +1,35 @@
+# Environment
+.env
+.env.*
+
+# Data
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Credentials / tokens
+token.pickle
+credentials.json
+
+# IDE
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
