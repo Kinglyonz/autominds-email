@@ -14,6 +14,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
 from models import ConnectedAccount
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,8 @@ def _get_drive_service(account: ConnectedAccount):
         token=account.access_token,
         refresh_token=account.refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=account.client_id,
-        client_secret=account.client_secret,
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
         scopes=["https://www.googleapis.com/auth/drive.readonly"],
     )
     return build("drive", "v3", credentials=creds)

@@ -2,119 +2,156 @@
 RAG Engine Skill for AutoMinds Intelligence (AMI)
 Handles the core Retrieval-Augmented Generation (RAG) pipeline.
 
+Uses scikit-learn TF-IDF for lightweight, reliable vector search.
+No GPU needed. No heavy frameworks. Works everywhere.
+
 - Processes documents (PDFs, text)
 - Splits documents into chunks
-- Creates vector embeddings using an AI model
-- Stores embeddings in a FAISS vector store
-- Queries the vector store to find relevant context for a given question
+- Creates TF-IDF vectors for similarity search
+- Queries the index to find relevant context for a given question
 """
 
+import json
 import logging
 import os
-from pathlib import Path
 import io
+from pathlib import Path
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_anthropic import AnthropicEmbeddings
-from langchain.docstore.document import Document
-
-from config import settings
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from pypdf import PdfReader
 
 logger = logging.getLogger(__name__)
 
-# Define a persistent path for vector stores for each user
-VECTOR_STORE_DIR = Path("vector_stores")
-VECTOR_STORE_DIR.mkdir(exist_ok=True)
+# Persistent storage for each user's knowledge base
+KNOWLEDGE_DIR = Path("knowledge_stores")
+KNOWLEDGE_DIR.mkdir(exist_ok=True)
 
-# Initialize the embedding model once to be reused
-# This uses the Anthropic API to convert text into numerical vectors.
-try:
-    embeddings = AnthropicEmbeddings(model="claude-3-sonnet-20240229", api_key=settings.anthropic_api_key)
-except Exception as e:
-    logger.error(f"Failed to initialize AnthropicEmbeddings: {e}")
-    embeddings = None
 
-def _get_vector_store_path(user_id: str) -> str:
-    """Generates a unique path for a user's specific vector store."""
-    return str(VECTOR_STORE_DIR / f"{user_id}_faiss_index")
+def _get_store_path(user_id: str) -> Path:
+    """Path to a user's knowledge store."""
+    return KNOWLEDGE_DIR / f"{user_id}_chunks.json"
 
-def _load_documents_from_pdf(file_content: io.BytesIO, file_name: str) -> list[Document]:
-    """Loads text from a PDF file stream."""
-    # PyPDFLoader needs a file path, so we temporarily save the stream to disk.
-    temp_pdf_path = f"temp_{file_name}"
+
+def _extract_text_from_pdf(file_content: io.BytesIO) -> str:
+    """Extract text from a PDF file stream."""
     try:
-        with open(temp_pdf_path, "wb") as f:
-            f.write(file_content.read())
-        
-        loader = PyPDFLoader(temp_pdf_path)
-        documents = loader.load()
-        return documents
-    finally:
-        # Clean up the temporary file
-        if os.path.exists(temp_pdf_path):
-            os.remove(temp_pdf_path)
+        reader = PdfReader(file_content)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        return text
+    except Exception as e:
+        logger.error(f"Error extracting PDF text: {e}")
+        return ""
+
+
+def _chunk_text(text: str, chunk_size: int = 800, overlap: int = 150) -> list[str]:
+    """Split text into overlapping chunks."""
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        if chunk.strip():
+            chunks.append(chunk.strip())
+        start += chunk_size - overlap
+    return chunks
+
 
 def process_and_store_documents(documents: list[tuple[str, io.BytesIO]], user_id: str):
     """
-    Processes a list of documents and adds them to the user's vector store.
+    Processes a list of documents and saves text chunks to disk.
     `documents` is a list of (file_name, file_content_stream).
     """
-    if not embeddings:
-        raise RuntimeError("Embeddings model is not initialized.")
+    all_chunks = []
 
-    all_docs = []
     for file_name, file_content in documents:
         if file_name.lower().endswith(".pdf"):
-            docs = _load_documents_from_pdf(file_content, file_name)
-            all_docs.extend(docs)
-        # TODO: Add handlers for other file types like .txt, .docx here
+            text = _extract_text_from_pdf(file_content)
         else:
-            logger.warning(f"Unsupported file type: {file_name}. Skipping.")
+            try:
+                text = file_content.read().decode("utf-8", errors="ignore")
+            except Exception:
+                logger.warning(f"Could not read {file_name}, skipping.")
+                continue
+
+        if not text.strip():
+            logger.warning(f"No text extracted from {file_name}, skipping.")
             continue
 
-    if not all_docs:
+        chunks = _chunk_text(text)
+        for chunk in chunks:
+            all_chunks.append({
+                "source": file_name,
+                "content": chunk,
+            })
+
+    if not all_chunks:
         logger.info("No processable documents found.")
         return
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = text_splitter.split_documents(all_docs)
+    store_path = _get_store_path(user_id)
 
-    vector_store_path = _get_vector_store_path(user_id)
+    # Merge with existing chunks if store exists
+    existing_chunks = []
+    if store_path.exists():
+        try:
+            existing_chunks = json.loads(store_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing_chunks = []
 
-    if os.path.exists(vector_store_path):
-        # Load existing store and merge
-        db = FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
-        db.add_documents(splits)
-    else:
-        # Create a new store
-        db = FAISS.from_documents(splits, embeddings)
+    # Avoid duplicates by checking source + first 100 chars
+    existing_keys = {(c["source"], c["content"][:100]) for c in existing_chunks}
+    new_chunks = [c for c in all_chunks if (c["source"], c["content"][:100]) not in existing_keys]
 
-    db.save_local(vector_store_path)
-    logger.info(f"Successfully processed and stored {len(splits)} document chunks for user {user_id}.")
+    combined = existing_chunks + new_chunks
+    store_path.write_text(json.dumps(combined, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    logger.info(f"Stored {len(new_chunks)} new chunks for user {user_id} (total: {len(combined)}).")
 
 
-def query_knowledge_base(query: str, user_id: str) -> str:
+def query_knowledge_base(query: str, user_id: str, top_k: int = 4) -> str:
     """
-    Queries the user's knowledge base to find relevant context.
-    Returns a string of the most relevant document chunks.
+    Queries the user's knowledge base using TF-IDF cosine similarity.
+    Returns the most relevant text chunks as context.
     """
-    if not embeddings:
-        raise RuntimeError("Embeddings model is not initialized.")
-
-    vector_store_path = _get_vector_store_path(user_id)
-    if not os.path.exists(vector_store_path):
+    store_path = _get_store_path(user_id)
+    if not store_path.exists():
         return "No knowledge base found for this user. Please sync your documents first."
 
-    db = FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
-    
-    # Get the 4 most relevant document chunks
-    docs = db.similarity_search(query, k=4)
+    try:
+        chunks = json.loads(store_path.read_text(encoding="utf-8"))
+    except Exception:
+        return "Error reading knowledge base."
 
-    if not docs:
-        return "I could not find any relevant information in your knowledge base to answer that question."
+    if not chunks:
+        return "Knowledge base is empty."
 
-    # Combine the content of the relevant chunks into a single context string
-    context = "\n\n".join([doc.page_content for doc in docs])
-    return context
+    # Build TF-IDF matrix from all chunks + the query
+    texts = [c["content"] for c in chunks]
+    texts.append(query)
+
+    vectorizer = TfidfVectorizer(stop_words="english", max_features=5000)
+    tfidf_matrix = vectorizer.fit_transform(texts)
+
+    # Compare query (last vector) against all chunk vectors
+    query_vec = tfidf_matrix[-1]
+    chunk_vecs = tfidf_matrix[:-1]
+    similarities = cosine_similarity(query_vec, chunk_vecs).flatten()
+
+    # Get top-k most similar chunks
+    top_indices = similarities.argsort()[-top_k:][::-1]
+    top_chunks = [chunks[i] for i in top_indices if similarities[i] > 0.05]
+
+    if not top_chunks:
+        return "I could not find any relevant information in your knowledge base."
+
+    # Format context with source attribution
+    context_parts = []
+    for chunk in top_chunks:
+        context_parts.append(f"[Source: {chunk['source']}]\n{chunk['content']}")
+
+    return "\n\n---\n\n".join(context_parts)

@@ -1,0 +1,13 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.env
+.env.*
+Dockerfile.local
+vector_stores/
+knowledge_stores/
+*.egg-info
+.venv
+venv
+node_modules

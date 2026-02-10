@@ -914,9 +914,9 @@ async def knowledge_query(req: KnowledgeQueryRequest):
 async def knowledge_status(user_id: str):
     """Check if a user has an active knowledge base."""
     import os
-    from rag_engine_skill import _get_vector_store_path
-    path = _get_vector_store_path(user_id)
-    has_kb = os.path.exists(path)
+    from rag_engine_skill import _get_store_path
+    path = _get_store_path(user_id)
+    has_kb = path.exists()
     return {"user_id": user_id, "has_knowledge_base": has_kb}
 
 
