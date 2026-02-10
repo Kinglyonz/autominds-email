@@ -3,90 +3,268 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Autominds - Dashboard</title>
+    <title>AutoMinds — AMI Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0a0a0a;
-        }
-        .glassmorphism {
-            background: rgba(17, 24, 39, 0.5);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #0a0a0a; }
+        .glassmorphism { background: rgba(17, 24, 39, 0.5); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .ami-active { border-left: 3px solid #00ff88; background: rgba(0, 255, 136, 0.05); }
+        .chat-bubble-user { background: rgba(0, 122, 255, 0.15); border: 1px solid rgba(0, 122, 255, 0.3); }
+        .chat-bubble-ami { background: rgba(0, 255, 136, 0.08); border: 1px solid rgba(0, 255, 136, 0.2); }
+        #chat-messages { scrollbar-width: thin; scrollbar-color: #333 transparent; }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     </style>
 </head>
-<body class="text-gray-200">
+<body class="text-gray-200 min-h-screen">
 
-    <div class="container mx-auto p-8">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-4xl font-bold text-white">Dashboard</h1>
-            <div>
-                <span id="user-greeting" class="mr-4"></span>
-                <a href="/index.html" onclick="logout()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Logout</a>
+    <div class="flex min-h-screen">
+
+        <!-- Sidebar -->
+        <div class="w-72 border-r border-gray-800 p-6 flex flex-col">
+            <div class="mb-8">
+                <h1 class="text-2xl font-black text-white tracking-tight">AUTO<span class="text-green-400">MINDS</span></h1>
+                <p class="text-xs text-gray-500 mt-1">AMI Dashboard</p>
+            </div>
+
+            <div class="mb-6">
+                <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Your AMIs</p>
+                <ul id="ami-list" class="space-y-2">
+                    <!-- AMI items injected here -->
+                </ul>
+            </div>
+
+            <div class="mt-auto pt-6 border-t border-gray-800">
+                <p id="user-greeting" class="text-sm text-gray-400 mb-3"></p>
+                <button onclick="logout()" class="w-full text-left text-sm text-red-400 hover:text-red-300 transition">Sign Out</button>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Left Sidebar -->
-            <div class="md:col-span-1">
-                <div class="glassmorphism rounded-lg p-6">
-                    <h2 class="text-2xl font-semibold text-white mb-4">My Employees</h2>
-                    <ul id="employee-list" class="space-y-2">
-                        <!-- Employee items will be injected here -->
-                    </ul>
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col">
+
+            <!-- Top Bar -->
+            <div class="border-b border-gray-800 p-4 flex items-center justify-between">
+                <div>
+                    <h2 id="panel-title" class="text-xl font-bold text-white">Knowledge Worker</h2>
+                    <p id="panel-subtitle" class="text-sm text-gray-500">Talk to your documents. Powered by RAG.</p>
+                </div>
+                <div id="ami-status" class="flex items-center gap-2">
+                    <span class="pulse-dot w-2 h-2 rounded-full bg-green-400"></span>
+                    <span class="text-xs text-green-400">Online</span>
                 </div>
             </div>
 
-            <!-- Main Content -->
-            <div class="md:col-span-2">
-                <div class="glassmorphism rounded-lg p-6">
-                    <h2 class="text-2xl font-semibold text-white mb-4">Control Panel</h2>
-                    <p>Select a Synthetic Employee to view its status and manage its tasks.</p>
-                    <!-- Detailed view will go here -->
+            <!-- Panel: Knowledge Worker -->
+            <div id="panel-knowledge" class="flex-1 flex flex-col">
+
+                <!-- Sync Bar -->
+                <div class="p-4 border-b border-gray-800 flex items-center gap-4">
+                    <input id="folder-id-input" type="text" placeholder="Google Drive Folder ID"
+                        class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500">
+                    <button onclick="syncDrive()" id="sync-btn"
+                        class="bg-green-600 hover:bg-green-500 text-white font-semibold text-sm px-5 py-2 rounded-lg transition">
+                        Sync Folder
+                    </button>
+                    <span id="sync-status" class="text-xs text-gray-500"></span>
+                </div>
+
+                <!-- Chat Area -->
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                    <!-- Welcome message -->
+                    <div class="chat-bubble-ami rounded-lg p-4 max-w-2xl">
+                        <p class="text-sm text-green-300 font-semibold mb-1">Knowledge Worker AMI</p>
+                        <p class="text-sm text-gray-300">Welcome! I'm your Knowledge Worker.<br><br>
+                        To get started:<br>
+                        1. Paste a <strong>Google Drive Folder ID</strong> above and click <strong>Sync Folder</strong>.<br>
+                        2. Once your documents are indexed, ask me anything about them below.<br><br>
+                        I can read PDFs and build a searchable knowledge base from your files. This is the foundation for creating Digital Clones, personalized assistants, and more.</p>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="p-4 border-t border-gray-800">
+                    <div class="flex items-center gap-3">
+                        <input id="chat-input" type="text" placeholder="Ask your knowledge base a question..."
+                            class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500"
+                            onkeydown="if(event.key==='Enter') sendMessage()">
+                        <button onclick="sendMessage()"
+                            class="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-5 py-3 rounded-lg transition">
+                            Send
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            <!-- Panel: Email Assistant -->
+            <div id="panel-email" class="flex-1 flex flex-col hidden">
+                <div class="flex-1 flex items-center justify-center p-8">
+                    <div class="text-center">
+                        <p class="text-6xl mb-4">📧</p>
+                        <h3 class="text-xl font-bold text-white mb-2">Email Assistant AMI</h3>
+                        <p class="text-gray-400 max-w-md">Your email assistant is running in the background. It scans your inbox, prioritizes messages, and generates daily briefings automatically.</p>
+                        <a href="/briefing?user_id=" id="briefing-link" class="inline-block mt-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-6 py-3 rounded-lg transition">View Latest Briefing</a>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <script>
+        const API_BASE = window.location.origin;
+        let userId = null;
+        let activePanel = 'knowledge';
+
         function logout() {
             localStorage.removeItem('autominds_user_id');
-            localStorage.removeItem('autominds_user_email');
-            localStorage.removeItem('autominds_user_name');
+            localStorage.removeItem('autominds_email');
+            localStorage.removeItem('autominds_name');
             window.location.href = '/';
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const userId = localStorage.getItem('autominds_user_id');
-            const userName = localStorage.getItem('autominds_user_name');
-            const userEmail = localStorage.getItem('autominds_user_email');
+        function switchPanel(panel) {
+            activePanel = panel;
+            document.getElementById('panel-knowledge').classList.toggle('hidden', panel !== 'knowledge');
+            document.getElementById('panel-email').classList.toggle('hidden', panel !== 'email');
 
-            if (!userId) {
-                window.location.href = '/';
-                return;
+            // Update top bar
+            if (panel === 'knowledge') {
+                document.getElementById('panel-title').textContent = 'Knowledge Worker';
+                document.getElementById('panel-subtitle').textContent = 'Talk to your documents. Powered by RAG.';
+            } else if (panel === 'email') {
+                document.getElementById('panel-title').textContent = 'Email Assistant';
+                document.getElementById('panel-subtitle').textContent = 'Automated inbox management and briefings.';
             }
 
-            document.getElementById('user-greeting').textContent = `Welcome, ${userName || userEmail}!`;
+            // Highlight active AMI in sidebar
+            document.querySelectorAll('#ami-list li').forEach(li => {
+                li.classList.remove('ami-active');
+                if (li.dataset.panel === panel) li.classList.add('ami-active');
+            });
+        }
 
-            // Mock data for hired employees
-            const hiredEmployees = [
-                { name: 'Email Assistant', status: 'Active' },
-                { name: 'CRM Specialist', status: 'Pending' },
+        function addChatMessage(sender, text, isUser) {
+            const container = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = `${isUser ? 'chat-bubble-user ml-auto' : 'chat-bubble-ami'} rounded-lg p-4 max-w-2xl`;
+            div.innerHTML = `
+                <p class="text-sm ${isUser ? 'text-blue-300' : 'text-green-300'} font-semibold mb-1">${sender}</p>
+                <p class="text-sm text-gray-300 whitespace-pre-wrap">${text}</p>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function syncDrive() {
+            const folderId = document.getElementById('folder-id-input').value.trim();
+            if (!folderId) { alert('Please enter a Google Drive Folder ID.'); return; }
+
+            const btn = document.getElementById('sync-btn');
+            const status = document.getElementById('sync-status');
+            btn.disabled = true;
+            btn.textContent = 'Syncing...';
+            status.textContent = 'Connecting to Google Drive...';
+
+            try {
+                const res = await fetch(`${API_BASE}/ami/knowledge/sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, folder_id: folderId })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.textContent = `✓ ${data.files_processed} file(s) indexed`;
+                    status.className = 'text-xs text-green-400';
+                    addChatMessage('Knowledge Worker AMI', `Sync complete! I indexed ${data.files_processed} document(s):\n• ${(data.files_indexed || []).join('\n• ')}\n\nYou can now ask me questions about these documents.`, false);
+                } else {
+                    status.textContent = `✗ ${data.detail || data.error}`;
+                    status.className = 'text-xs text-red-400';
+                }
+            } catch (err) {
+                status.textContent = `✗ Error: ${err.message}`;
+                status.className = 'text-xs text-red-400';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sync Folder';
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const question = input.value.trim();
+            if (!question) return;
+
+            addChatMessage('You', question, true);
+            input.value = '';
+
+            // Show typing indicator
+            addChatMessage('Knowledge Worker AMI', '⏳ Searching your knowledge base...', false);
+
+            try {
+                const res = await fetch(`${API_BASE}/ami/knowledge/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, question: question })
+                });
+                const data = await res.json();
+
+                // Remove typing indicator (last message)
+                const container = document.getElementById('chat-messages');
+                container.removeChild(container.lastChild);
+
+                addChatMessage('Knowledge Worker AMI', data.answer || 'No response received.', false);
+            } catch (err) {
+                const container = document.getElementById('chat-messages');
+                container.removeChild(container.lastChild);
+                addChatMessage('Knowledge Worker AMI', `Error: ${err.message}`, false);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            userId = localStorage.getItem('autominds_user_id');
+            const userName = localStorage.getItem('autominds_name');
+            const userEmail = localStorage.getItem('autominds_email');
+
+            if (!userId) { window.location.href = '/'; return; }
+
+            document.getElementById('user-greeting').textContent = userName || userEmail || 'User';
+            document.getElementById('briefing-link').href = `/briefing?user_id=${userId}`;
+
+            // Build AMI list
+            const amis = [
+                { name: 'Knowledge Worker', icon: '🧠', panel: 'knowledge', status: 'Active' },
+                { name: 'Email Assistant', icon: '📧', panel: 'email', status: 'Active' },
             ];
 
-            const employeeList = document.getElementById('employee-list');
-            hiredEmployees.forEach(emp => {
+            const amiList = document.getElementById('ami-list');
+            amis.forEach(ami => {
                 const li = document.createElement('li');
-                li.className = 'p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 cursor-pointer flex justify-between items-center';
+                li.dataset.panel = ami.panel;
+                li.className = `p-3 rounded-lg cursor-pointer flex items-center gap-3 transition hover:bg-gray-800/50 ${ami.panel === 'knowledge' ? 'ami-active' : ''}`;
                 li.innerHTML = `
-                    <span class="font-medium text-white">${emp.name}</span>
-                    <span class="text-xs font-bold py-1 px-2 rounded-full ${emp.status === 'Active' ? 'bg-green-500 text-white' : 'bg-yellow-500 text-gray-900'}">${emp.status}</span>
+                    <span class="text-lg">${ami.icon}</span>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-white">${ami.name}</p>
+                        <p class="text-xs text-gray-500">AMI • ${ami.status}</p>
+                    </div>
                 `;
-                employeeList.appendChild(li);
+                li.onclick = () => switchPanel(ami.panel);
+                amiList.appendChild(li);
             });
+
+            // Check knowledge base status
+            fetch(`${API_BASE}/ami/knowledge/status/${userId}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.has_knowledge_base) {
+                        document.getElementById('sync-status').textContent = '✓ Knowledge base active';
+                        document.getElementById('sync-status').className = 'text-xs text-green-400';
+                    }
+                })
+                .catch(() => {});
         });
     </script>
 

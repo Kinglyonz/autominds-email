@@ -49,6 +49,7 @@ class Settings(BaseSettings):
         "https://www.googleapis.com/auth/tasks",
         "https://www.googleapis.com/auth/contacts.readonly",
         "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/drive.readonly",
     ]
 
     # --- Autonomous Agent ---

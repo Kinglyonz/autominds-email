@@ -29,6 +29,7 @@ import outlook_provider
 import email_brain
 import scheduler
 import autonomous_agent
+import knowledge_worker_ami
 
 # ─── Logging ─────────────────────────────────────────────
 
@@ -877,6 +878,46 @@ def _get_gmail_account(user):
         if account.provider == EmailProvider.GMAIL:
             return account
     return None
+
+
+# ══════════════════════════════════════════════════════════
+# AMI ROUTES — Knowledge Worker (RAG)
+# ══════════════════════════════════════════════════════════
+
+class KnowledgeSyncRequest(BaseModel):
+    user_id: str
+    folder_id: str
+
+class KnowledgeQueryRequest(BaseModel):
+    user_id: str
+    question: str
+    persona: Optional[str] = None
+
+
+@app.post("/ami/knowledge/sync")
+async def knowledge_sync(req: KnowledgeSyncRequest):
+    """Sync a Google Drive folder into the user's RAG knowledge base."""
+    result = knowledge_worker_ami.sync_user_drive_folder(req.user_id, req.folder_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Sync failed"))
+    return result
+
+
+@app.post("/ami/knowledge/query")
+async def knowledge_query(req: KnowledgeQueryRequest):
+    """Ask a question to the user's personal knowledge base."""
+    result = knowledge_worker_ami.ask_knowledge_base(req.user_id, req.question, req.persona)
+    return result
+
+
+@app.get("/ami/knowledge/status/{user_id}")
+async def knowledge_status(user_id: str):
+    """Check if a user has an active knowledge base."""
+    import os
+    from rag_engine_skill import _get_vector_store_path
+    path = _get_vector_store_path(user_id)
+    has_kb = os.path.exists(path)
+    return {"user_id": user_id, "has_knowledge_base": has_kb}
 
 
 # ──────────────────────────────────────────────────────────
