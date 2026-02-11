@@ -24,7 +24,7 @@ from models import (
     AutoSendRuleRequest, HealthResponse, UserSettings,
     DraftStatus,
 )
-import user_store
+import user_store_fix as user_store
 import gmail_provider
 import outlook_provider
 import email_brain
