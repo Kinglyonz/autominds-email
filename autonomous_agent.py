@@ -1,6 +1,6 @@
 """
 AutoMinds Email Assistant - Autonomous Agent
-The 'synthetic employee' that runs independently on a schedule.
+The Inbox Pilot AMI that runs independently on a schedule.
 
 This module is NOT part of the chat conversation flow. It's a fully independent
 background worker that:
@@ -97,7 +97,7 @@ def _save_processed_ids(user_id: str, ids: set):
 # ─── EmailAgent ──────────────────────────────────────────
 
 class EmailAgent:
-    """Autonomous email management agent — the 'synthetic employee'.
+    """Autonomous email management agent — the Inbox Pilot AMI.
 
     Runs independently on a schedule.  For each user it:
       1. Fetches unread emails from all connected accounts

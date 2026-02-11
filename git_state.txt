@@ -1,0 +1,11 @@
+22d253d chore: add .dockerignore and update skills, requirements, server
+80ea756 feat: Add Knowledge Worker AMI with RAG pipeline, Google Drive skill, and chat dashboard
+526ec2a feat: Create user dashboard page
+29dadb6 feat: marketplace dashboard with synthetic employees branding, static frontend
+f96aa87 fix: remove Dockerfile from deploy, let Nixpacks auto-detect Python + Procfile
+On branch master
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	git_state.txt
+
+nothing added to commit but untracked files present (use "git add" to track)

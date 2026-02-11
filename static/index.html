@@ -1,520 +1,459 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AutoMinds — Synthetic Employees</title>
-<style>
-  :root {
-    --bg: #07080a; --surface: #0f1117; --card: #151820; --border: #1e2230;
-    --text: #e4e7ec; --text2: #8b92a5; --accent: #00d4ff; --accent2: #6c5ce7;
-    --green: #00e88f; --orange: #ff9f43; --red: #ff5757; --purple: #a855f7;
-    --radius: 12px;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-         background: var(--bg); color: var(--text); line-height: 1.6; min-height:100vh; }
-
-  /* ─── NAV ─── */
-  .nav { display:flex; align-items:center; justify-content:space-between; padding:16px 32px;
-         border-bottom:1px solid var(--border); background: var(--surface); position:sticky; top:0; z-index:100; }
-  .nav-brand { font-size:20px; font-weight:700; color:var(--accent); letter-spacing:-0.5px; }
-  .nav-brand span { color: var(--text2); font-weight:400; font-size:14px; margin-left:8px; }
-  .nav-user { display:flex; align-items:center; gap:12px; }
-  .nav-user .email { color:var(--text2); font-size:13px; }
-  .nav-user .avatar { width:32px; height:32px; border-radius:50%; background:var(--accent2);
-    display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; }
-  .nav-links { display:flex; gap:4px; }
-  .nav-links a { padding:8px 16px; color:var(--text2); text-decoration:none; border-radius:8px;
-    font-size:14px; font-weight:500; transition:.2s; }
-  .nav-links a:hover, .nav-links a.active { color:var(--text); background:var(--card); }
-
-  /* ─── LAYOUT ─── */
-  .container { max-width:1200px; margin:0 auto; padding:32px 24px; }
-  .page { display:none; } .page.active { display:block; }
-
-  /* ─── HERO ─── */
-  .hero { text-align:center; padding:48px 0 32px; }
-  .hero h1 { font-size:36px; font-weight:800; letter-spacing:-1px; margin-bottom:8px; }
-  .hero h1 em { font-style:normal; color:var(--accent); }
-  .hero p { color:var(--text2); font-size:16px; max-width:560px; margin:0 auto; }
-
-  /* ─── CONNECT BANNER ─── */
-  .connect-banner { background: linear-gradient(135deg, #0d1b3e, #0a1628); border:1px solid var(--border);
-    border-radius:var(--radius); padding:32px; text-align:center; margin:24px 0 40px; }
-  .connect-banner h2 { font-size:20px; margin-bottom:8px; }
-  .connect-banner p { color:var(--text2); font-size:14px; margin-bottom:20px; }
-  .btn { display:inline-flex; align-items:center; gap:8px; padding:12px 28px; border-radius:10px;
-    font-size:15px; font-weight:600; text-decoration:none; border:none; cursor:pointer; transition:.2s; }
-  .btn-primary { background:var(--accent); color:#000; }
-  .btn-primary:hover { background:#00b8e6; transform:translateY(-1px); }
-  .btn-outline { background:transparent; border:1.5px solid var(--border); color:var(--text); }
-  .btn-outline:hover { border-color:var(--accent); color:var(--accent); }
-  .btn-sm { padding:8px 16px; font-size:13px; border-radius:8px; }
-  .btn-green { background:var(--green); color:#000; }
-  .btn-green:hover { background:#00cc7a; }
-  .btn-disabled { opacity:.4; pointer-events:none; }
-
-  /* ─── CARDS GRID ─── */
-  .section-title { font-size:14px; font-weight:600; color:var(--text2); text-transform:uppercase;
-    letter-spacing:1.5px; margin-bottom:16px; }
-  .employees-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px; }
-  .emp-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
-    padding:24px; transition:.2s; position:relative; overflow:hidden; }
-  .emp-card:hover { border-color: var(--accent); transform:translateY(-2px); }
-  .emp-card .badge { position:absolute; top:16px; right:16px; padding:4px 10px; border-radius:20px;
-    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
-  .badge-free { background: rgba(0,232,143,.15); color: var(--green); }
-  .badge-price { background: rgba(168,85,247,.15); color: var(--purple); }
-  .badge-soon { background: rgba(139,146,165,.1); color: var(--text2); }
-  .emp-icon { font-size:36px; margin-bottom:12px; }
-  .emp-card h3 { font-size:17px; font-weight:700; margin-bottom:4px; }
-  .emp-card .role { color:var(--accent); font-size:12px; font-weight:600; text-transform:uppercase;
-    letter-spacing:0.5px; margin-bottom:8px; }
-  .emp-card .desc { color:var(--text2); font-size:13px; line-height:1.5; margin-bottom:16px; }
-  .emp-skills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
-  .skill-tag { padding:4px 10px; background:rgba(0,212,255,.08); border:1px solid rgba(0,212,255,.15);
-    border-radius:6px; font-size:11px; color:var(--accent); font-weight:500; }
-  .emp-card .emp-action { width:100%; }
-
-  /* ─── DASHBOARD ─── */
-  .stats-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap:12px; margin-bottom:24px; }
-  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
-    padding:20px; }
-  .stat-card .label { font-size:12px; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
-  .stat-card .value { font-size:28px; font-weight:800; margin-top:4px; letter-spacing:-1px; }
-  .stat-card .value.accent { color:var(--accent); }
-  .stat-card .value.green { color:var(--green); }
-
-  .briefing-box { background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
-    padding:24px; margin-bottom:20px; }
-  .briefing-box h3 { font-size:16px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
-  .briefing-text { color:var(--text2); font-size:14px; white-space:pre-wrap; line-height:1.7; }
-  .briefing-text .loading { color:var(--text2); font-style:italic; }
-
-  .email-list { display:flex; flex-direction:column; gap:8px; }
-  .email-item { background:var(--card); border:1px solid var(--border); border-radius:10px;
-    padding:16px 20px; display:flex; align-items:flex-start; gap:14px; cursor:pointer; transition:.15s; }
-  .email-item:hover { border-color:var(--accent); }
-  .email-priority { width:4px; min-height:40px; border-radius:4px; flex-shrink:0; margin-top:2px; }
-  .priority-urgent { background:var(--red); }
-  .priority-high { background:var(--orange); }
-  .priority-normal { background:var(--accent); }
-  .priority-low { background:var(--text2); }
-  .email-content { flex:1; min-width:0; }
-  .email-from { font-size:14px; font-weight:600; }
-  .email-subject { font-size:13px; color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .email-meta { display:flex; gap:8px; align-items:center; margin-top:4px; }
-  .email-cat { padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; text-transform:uppercase;
-    background:rgba(0,212,255,.1); color:var(--accent); }
-  .email-time { font-size:11px; color:var(--text2); }
-  .email-summary { font-size:12px; color:var(--text2); margin-top:6px; line-height:1.4; }
-
-  /* ─── AGENT STATUS ─── */
-  .agent-bar { display:flex; align-items:center; gap:12px; padding:12px 20px; background:var(--card);
-    border:1px solid var(--border); border-radius:10px; margin-bottom:20px; font-size:13px; }
-  .agent-dot { width:8px; height:8px; border-radius:50%; }
-  .dot-active { background:var(--green); box-shadow:0 0 8px var(--green); }
-  .dot-inactive { background:var(--text2); }
-  .agent-bar .label { color:var(--text2); }
-  .agent-bar .status { font-weight:600; }
-
-  /* ─── MODAL ─── */
-  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200; display:none;
-    align-items:center; justify-content:center; padding:20px; }
-  .modal-overlay.open { display:flex; }
-  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px;
-    max-width:550px; width:100%; max-height:80vh; overflow-y:auto; padding:32px; }
-  .modal h2 { margin-bottom:16px; }
-  .modal .close { float:right; background:none; border:none; color:var(--text2); font-size:24px; cursor:pointer; }
-
-  /* ─── TOAST ─── */
-  .toast { position:fixed; bottom:24px; right:24px; padding:14px 24px; background:var(--green); color:#000;
-    border-radius:10px; font-size:14px; font-weight:600; z-index:300; transform:translateY(100px);
-    transition:.3s; opacity:0; }
-  .toast.show { transform:translateY(0); opacity:1; }
-
-  /* ─── RESPONSIVE ─── */
-  @media (max-width:768px) {
-    .nav { padding:12px 16px; flex-wrap:wrap; gap:8px; }
-    .container { padding:16px; }
-    .hero h1 { font-size:26px; }
-    .employees-grid { grid-template-columns: 1fr; }
-    .stats-row { grid-template-columns: 1fr 1fr; }
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoMinds | AI Email Assistant</title>
+    <meta name="description" content="AutoMinds reads, sorts, drafts, and schedules your emails — so you don't have to. AI-powered email assistant for professionals.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" type="image/svg+xml" href="/static/logo_white.svg">
+    <style>
+        /* Show dashboard button when logged in, hide connect */
+        body.logged-in .btn-connect { display: none !important; }
+        body.logged-in .btn-dashboard { display: inline-flex !important; }
+        .btn-dashboard { display: none !important; }
+    </style>
 </head>
+
 <body>
 
-<!-- ═══ NAV ═══ -->
-<nav class="nav">
-  <div class="nav-brand">AutoMinds <span>Synthetic Employees</span></div>
-  <div class="nav-links">
-    <a href="#marketplace" class="active" onclick="showPage('marketplace',this)">Marketplace</a>
-    <a href="#dashboard" onclick="showPage('dashboard',this)">Dashboard</a>
-    <a href="/docs" target="_blank">API</a>
-  </div>
-  <div class="nav-user" id="navUser">
-    <span class="email" id="navEmail">Not connected</span>
-    <div class="avatar" id="navAvatar">?</div>
-  </div>
-</nav>
-
-<!-- ═══ MARKETPLACE PAGE ═══ -->
-<div class="container page active" id="page-marketplace">
-  <div class="hero">
-    <h1>Hire <em>Synthetic Employees</em></h1>
-    <p>AI workers that solve one problem really, really well. Enable the ones you need — they work 24/7.</p>
-  </div>
-
-  <div class="connect-banner" id="connectBanner">
-    <h2>Connect Your Gmail to Get Started</h2>
-    <p>Your Email Assistant is free forever. Connect Gmail and your first synthetic employee starts working immediately.</p>
-    <a href="/auth/google" class="btn btn-primary">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 001 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-      Connect Gmail — It's Free
-    </a>
-  </div>
-
-  <div class="section-title" style="margin-top:40px;">Available Synthetic Employees</div>
-  <div class="employees-grid">
-
-    <!-- EMAIL ASSISTANT — FREE -->
-    <div class="emp-card">
-      <div class="badge badge-free">Free</div>
-      <div class="emp-icon">📧</div>
-      <h3>Email Assistant</h3>
-      <div class="role">Inbox Manager</div>
-      <div class="desc">Reads every email, prioritizes what matters, writes your first draft, and delivers a daily briefing. Never miss an important email again.</div>
-      <div class="emp-skills">
-        <span class="skill-tag">Gmail API</span>
-        <span class="skill-tag">Claude Opus</span>
-        <span class="skill-tag">Smart Priority</span>
-        <span class="skill-tag">Draft Replies</span>
-        <span class="skill-tag">Daily Briefing</span>
-      </div>
-      <a href="/auth/google" class="btn btn-green btn-sm emp-action" id="emailEnableBtn">Enable — Free Forever</a>
-    </div>
-
-    <!-- CRM — $10/mo -->
-    <div class="emp-card">
-      <div class="badge badge-price">$10/mo</div>
-      <div class="emp-icon">🤝</div>
-      <h3>Relationship Manager</h3>
-      <div class="role">Lightweight CRM</div>
-      <div class="desc">Tracks every contact, relationship history, and conversation context. Proactively nudges you when you haven't followed up. Drafts all outreach.</div>
-      <div class="emp-skills">
-        <span class="skill-tag">Google Contacts</span>
-        <span class="skill-tag">Email History</span>
-        <span class="skill-tag">Auto Follow-up</span>
-        <span class="skill-tag">Relationship Score</span>
-      </div>
-      <button class="btn btn-outline btn-sm emp-action btn-disabled">Coming Soon</button>
-    </div>
-
-    <!-- BOOKKEEPER — $15/mo -->
-    <div class="emp-card">
-      <div class="badge badge-price">$15/mo</div>
-      <div class="emp-icon">📊</div>
-      <h3>Bookkeeper</h3>
-      <div class="role">Financial Tracker</div>
-      <div class="desc">Scans receipts, invoices, and bank statements. Categorizes expenses, tracks revenue, and generates financial reports in Google Sheets.</div>
-      <div class="emp-skills">
-        <span class="skill-tag">Google Sheets</span>
-        <span class="skill-tag">Receipt Scan</span>
-        <span class="skill-tag">Bank Sync</span>
-        <span class="skill-tag">Reports</span>
-      </div>
-      <button class="btn btn-outline btn-sm emp-action btn-disabled">Coming Soon</button>
-    </div>
-
-    <!-- KNOWLEDGE BASE — $10/mo -->
-    <div class="emp-card">
-      <div class="badge badge-price">$10/mo</div>
-      <div class="emp-icon">🧠</div>
-      <h3>Knowledge Analyst</h3>
-      <div class="role">RAG Database</div>
-      <div class="desc">Connect Google Drive or OneDrive. Drop files in a folder — instantly searchable. Ask questions about your own documents, contracts, and notes.</div>
-      <div class="emp-skills">
-        <span class="skill-tag">Google Drive</span>
-        <span class="skill-tag">OneDrive</span>
-        <span class="skill-tag">Vector Search</span>
-        <span class="skill-tag">RAG</span>
-      </div>
-      <button class="btn btn-outline btn-sm emp-action btn-disabled">Coming Soon</button>
-    </div>
-
-    <!-- SCHEDULER — $10/mo -->
-    <div class="emp-card">
-      <div class="badge badge-price">$10/mo</div>
-      <div class="emp-icon">📅</div>
-      <h3>Schedule Coordinator</h3>
-      <div class="role">Calendar Manager</div>
-      <div class="desc">Manages your calendar, schedules meetings with Google Meet, records calls, emails participants, and handles rescheduling automatically.</div>
-      <div class="emp-skills">
-        <span class="skill-tag">Google Calendar</span>
-        <span class="skill-tag">Google Meet</span>
-        <span class="skill-tag">Auto-Schedule</span>
-        <span class="skill-tag">Reminders</span>
-      </div>
-      <button class="btn btn-outline btn-sm emp-action btn-disabled">Coming Soon</button>
-    </div>
-
-    <!-- CONTENT WRITER — $15/mo -->
-    <div class="emp-card">
-      <div class="badge badge-price">$15/mo</div>
-      <div class="emp-icon">✍️</div>
-      <h3>Content Writer</h3>
-      <div class="role">Document Creator</div>
-      <div class="desc">Writes proposals, reports, and docs on demand. Creates Google Docs and shares links. Uses your knowledge base for context and tone matching.</div>
-      <div class="emp-skills">
-        <span class="skill-tag">Google Docs</span>
-        <span class="skill-tag">Google Drive</span>
-        <span class="skill-tag">Templates</span>
-        <span class="skill-tag">Tone Match</span>
-      </div>
-      <button class="btn btn-outline btn-sm emp-action btn-disabled">Coming Soon</button>
-    </div>
-
-  </div>
-
-  <div style="text-align:center; margin-top:48px; padding:32px; color:var(--text2); font-size:13px;">
-    <p>Every synthetic employee is built on <strong style="color:var(--accent)">Google APIs</strong> — your data stays in your Google account.</p>
-    <p style="margin-top:4px;">Powered by Claude Opus 4 + Gemini Flash for speed.</p>
-  </div>
-</div>
-
-<!-- ═══ DASHBOARD PAGE ═══ -->
-<div class="container page" id="page-dashboard">
-  <div id="dashNotConnected" style="text-align:center; padding:80px 20px;">
-    <div style="font-size:48px; margin-bottom:16px;">📧</div>
-    <h2>Connect Gmail to see your dashboard</h2>
-    <p style="color:var(--text2); margin:12px 0 24px;">Your Email Assistant will analyze your inbox and show you what matters.</p>
-    <a href="/auth/google" class="btn btn-primary">Connect Gmail — Free</a>
-  </div>
-
-  <div id="dashConnected" style="display:none;">
-    <!-- Agent Status Bar -->
-    <div class="agent-bar">
-      <div class="agent-dot dot-active" id="agentDot"></div>
-      <span class="label">Email Assistant</span>
-      <span class="status" style="color:var(--green)" id="agentStatusText">Active</span>
-      <span style="flex:1"></span>
-      <span class="label" id="agentLastRun"></span>
-      <button class="btn btn-outline btn-sm" onclick="runAgentNow()">Run Now</button>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="label">Unread Emails</div>
-        <div class="value accent" id="statUnread">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Urgent</div>
-        <div class="value" style="color:var(--red)" id="statUrgent">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Drafts Pending</div>
-        <div class="value" style="color:var(--orange)" id="statDrafts">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Tasks</div>
-        <div class="value green" id="statTasks">—</div>
-      </div>
-    </div>
-
-    <!-- Briefing -->
-    <div class="briefing-box">
-      <h3>📋 Today's Briefing <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="loadBriefing(true)">Refresh</button></h3>
-      <div class="briefing-text" id="briefingContent"><span class="loading">Loading your briefing...</span></div>
-    </div>
-
-    <!-- Emails -->
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-      <div class="section-title" style="margin:0;">Priority Inbox</div>
-      <button class="btn btn-outline btn-sm" onclick="loadEmails()">Refresh</button>
-    </div>
-    <div class="email-list" id="emailList">
-      <div style="text-align:center; padding:40px; color:var(--text2);">Loading emails...</div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ TOAST ═══ -->
-<div class="toast" id="toast"></div>
-
-<script>
-const API = '';
-let userId = localStorage.getItem('autominds_user_id');
-let userEmail = localStorage.getItem('autominds_email');
-let userName = localStorage.getItem('autominds_name');
-
-// ─── Init ───
-function init() {
-  if (userId) {
-    document.getElementById('navEmail').textContent = userEmail || '';
-    document.getElementById('navAvatar').textContent = (userName || userEmail || '?')[0].toUpperCase();
-    document.getElementById('connectBanner').style.display = 'none';
-    document.getElementById('emailEnableBtn').textContent = '✓ Enabled';
-    document.getElementById('emailEnableBtn').classList.add('btn-disabled');
-    document.getElementById('emailEnableBtn').href = '#';
-    document.getElementById('dashNotConnected').style.display = 'none';
-    document.getElementById('dashConnected').style.display = 'block';
-  }
-  // Check hash
-  if (window.location.hash === '#dashboard' && userId) {
-    showPage('dashboard', document.querySelector('a[href="#dashboard"]'));
-  }
-}
-
-// ─── Navigation ───
-function showPage(name, el) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-  const page = document.getElementById('page-' + name);
-  if (page) page.classList.add('active');
-  if (el) el.classList.add('active');
-  if (name === 'dashboard' && userId) {
-    loadDashboard();
-  }
-}
-
-// ─── Dashboard Loading ───
-let dashLoaded = false;
-function loadDashboard() {
-  if (!userId) return;
-  if (!dashLoaded) {
-    loadBriefing();
-    loadEmails();
-    loadAgentStatus();
-    loadDrafts();
-    loadTasks();
-    dashLoaded = true;
-  }
-}
-
-async function loadBriefing(force = false) {
-  const el = document.getElementById('briefingContent');
-  el.innerHTML = '<span class="loading">Generating your briefing with Claude Opus...</span>';
-  try {
-    const r = await fetch(`${API}/briefing?user_id=${userId}&force_new=${force}`);
-    const d = await r.json();
-    if (d.full_text) {
-      el.textContent = d.full_text;
-    } else if (d.detail) {
-      el.innerHTML = '<span class="loading">' + d.detail + '</span>';
-    } else {
-      el.textContent = '🎉 Inbox zero! No unread emails.';
-    }
-  } catch(e) {
-    el.innerHTML = '<span class="loading">Could not load briefing. Connect Gmail first.</span>';
-  }
-}
-
-async function loadEmails() {
-  const el = document.getElementById('emailList');
-  try {
-    const r = await fetch(`${API}/emails?user_id=${userId}&max_results=15&analyze=true`);
-    const d = await r.json();
-    if (d.detail) { el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text2)">${d.detail}</div>`; return; }
-    document.getElementById('statUnread').textContent = d.count || 0;
-    let urgent = 0;
-    el.innerHTML = '';
-    if (!d.emails || d.emails.length === 0) {
-      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2)">🎉 Inbox zero!</div>';
-      return;
-    }
-    d.emails.forEach(e => {
-      const pri = (e.priority || 'normal').toLowerCase();
-      if (pri === 'urgent') urgent++;
-      const cat = e.category || '';
-      const from = e.sender?.name || e.sender?.email || 'Unknown';
-      const time = e.date ? new Date(e.date).toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
-      el.innerHTML += `
-        <div class="email-item" onclick="showEmailDetail('${e.id}')">
-          <div class="email-priority priority-${pri}"></div>
-          <div class="email-content">
-            <div class="email-from">${esc(from)}</div>
-            <div class="email-subject">${esc(e.subject || '(no subject)')}</div>
-            <div class="email-meta">
-              ${cat ? `<span class="email-cat">${esc(cat)}</span>` : ''}
-              <span class="email-time">${time}</span>
+    <!-- Nav -->
+    <nav class="nav">
+        <div class="container nav-wrapper">
+            <a href="#" class="brand">
+                <div class="brand-icon"></div>
+                AutoMinds
+            </a>
+            <div class="nav-menu">
+                <a href="#capabilities" class="nav-link">Features</a>
+                <a href="#pricing" class="nav-link" style="color: #0071E3;">Pricing</a>
+                <a href="#protocol" class="nav-link" style="color: #22c55e;">How It Works</a>
+                <a href="#contact" class="nav-link" style="color: #ef4444;">Contact</a>
+                <button id="themedev-toggle" class="nav-link"
+                    style="background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 0.25rem;">
+                    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        style="display: block;">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        style="display: none;">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
             </div>
-            ${e.summary ? `<div class="email-summary">${esc(e.summary)}</div>` : ''}
-          </div>
-        </div>`;
-    });
-    document.getElementById('statUrgent').textContent = urgent;
-  } catch(e) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2)">Connect Gmail to see emails</div>';
-  }
-}
+        </div>
+    </nav>
 
-async function loadDrafts() {
-  try {
-    const r = await fetch(`${API}/drafts?user_id=${userId}`);
-    const d = await r.json();
-    document.getElementById('statDrafts').textContent = d.count || 0;
-  } catch(e) { document.getElementById('statDrafts').textContent = '0'; }
-}
+    <!-- Hero -->
+    <section class="hero">
+        <canvas id="hero-canvas" class="hero-canvas"></canvas>
+        <div class="container hero-content">
+            <span class="hero-Eyebrow">AI-Powered Email Assistant</span>
+            <h1 class="hero-title">Your Inbox.<br>On Autopilot.</h1>
+            <p class="hero-subtitle">
+                AutoMinds reads, sorts, drafts, and schedules your emails — so you don't have to.<br>
+                Save 50+ hours per month. Set up in 2 minutes.
+            </p>
+            <div class="hero-actions">
+                <a href="/auth/google" class="btn btn-primary btn-connect">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="margin-right:6px;"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 001 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                    Connect Gmail — It's Free →
+                </a>
+                <a href="/static/dashboard.html" class="btn btn-primary btn-dashboard">Open Command Center →</a>
+                <a href="#capabilities" class="btn btn-secondary">See Features</a>
+            </div>
+        </div>
+    </section>
 
-async function loadTasks() {
-  try {
-    const r = await fetch(`${API}/tasks?user_id=${userId}`);
-    const d = await r.json();
-    document.getElementById('statTasks').textContent = d.count || 0;
-  } catch(e) { document.getElementById('statTasks').textContent = '0'; }
-}
+    <!-- Capabilities (Bento) -->
+    <section id="capabilities" class="capabilities">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">What Your Inbox Gets</h2>
+                <p>Everything you need to take control of your email. Nothing you don't.</p>
+            </div>
 
-async function loadAgentStatus() {
-  try {
-    const r = await fetch(`${API}/agent/status`);
-    const d = await r.json();
-    const dot = document.getElementById('agentDot');
-    const txt = document.getElementById('agentStatusText');
-    if (d.enabled) {
-      dot.className = 'agent-dot dot-active';
-      txt.textContent = 'Active';
-      txt.style.color = 'var(--green)';
-    } else {
-      dot.className = 'agent-dot dot-inactive';
-      txt.textContent = 'Disabled';
-      txt.style.color = 'var(--text2)';
-    }
-    if (d.status?.last_run) {
-      document.getElementById('agentLastRun').textContent = 'Last run: ' + new Date(d.status.last_run).toLocaleTimeString();
-    }
-  } catch(e) {}
-}
+            <div class="bento-grid">
+                <!-- Feature 1: Smart Sorting -->
+                <div class="bento-card span-2" style="position: relative; overflow: hidden;">
+                    <div class="card-content">
+                        <div class="product-badge" style="color: #3B82F6; border-color: rgba(59, 130, 246, 0.3);">SMART SORTING</div>
+                        <h3>AI Inbox Organization</h3>
+                        <p><strong>Your emails, instantly categorized.</strong> Clients, promotions, urgent, follow-ups — the AI sorts everything the moment it lands.</p>
+                        <ul class="feature-list" style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                            <li>► Priority Flagging — VIPs surface first</li>
+                            <li>► Smart Categories — auto-organized</li>
+                            <li>► Thread Summaries — TLDR any chain</li>
+                        </ul>
+                    </div>
+                </div>
 
-async function runAgentNow() {
-  toast('Running agent...');
-  try {
-    const r = await fetch(`${API}/agent/run-now?user_id=${userId}`, {method:'POST'});
-    const d = await r.json();
-    toast('Agent cycle complete!');
-    loadEmails();
-    loadBriefing();
-    loadAgentStatus();
-  } catch(e) { toast('Agent run failed'); }
-}
+                <!-- Feature 2: Auto-Draft -->
+                <div class="bento-card span-vertical" style="background: linear-gradient(180deg, rgba(34, 197, 94, 0.05) 0%, rgba(0,0,0,0) 100%); border-color: rgba(34, 197, 94, 0.2);">
+                    <div class="card-content">
+                        <div class="product-badge" style="color: #22c55e; border-color: rgba(34, 197, 94, 0.3);">AUTO-DRAFT</div>
+                        <h3>AI-Written Replies</h3>
+                        <p>Context-aware responses drafted in YOUR voice. Review, tweak, send — or let it fly automatically.</p>
+                        <ul class="feature-list" style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                            <li>► Learns your writing style</li>
+                            <li>► Context from full thread</li>
+                            <li>► One-click send</li>
+                        </ul>
+                    </div>
+                </div>
 
-function showEmailDetail(emailId) {
-  // TODO: open modal with email detail + draft reply
-  toast('Email detail view coming soon');
-}
+                <!-- Feature 3: Follow-Up Scheduling -->
+                <div class="bento-card span-2">
+                    <div class="card-content">
+                        <div class="product-badge" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">SCHEDULING</div>
+                        <h3>Follow-Up Automation</h3>
+                        <p>Never forget a thread. Automatic reminders, scheduled follow-ups, and timed sends — your email runs like clockwork.</p>
+                        <ul class="feature-list" style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                            <li>► Auto follow-up reminders</li>
+                            <li>► Scheduled sends</li>
+                            <li>► Meeting coordination</li>
+                        </ul>
+                    </div>
+                </div>
 
-// ─── Utils ───
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
+                <!-- Feature 4: Analytics -->
+                <div class="bento-card span-2" style="background: linear-gradient(180deg, rgba(255, 153, 0, 0.05) 0%, rgba(0,0,0,0) 100%); border-color: rgba(255, 153, 0, 0.2);">
+                    <div class="card-content">
+                        <div class="product-badge" style="color: #ff9900; border-color: rgba(255, 153, 0, 0.3);">ANALYTICS</div>
+                        <h3>Email Intelligence</h3>
+                        <p>See your email patterns, response times, and productivity trends. Know exactly where your time goes.</p>
+                        <ul class="feature-list" style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                            <li>► Response time tracking</li>
+                            <li>► Volume analytics</li>
+                            <li>► Productivity insights</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
 
-// ─── Boot ───
-init();
-</script>
+            <!-- COMPARISON SECTION -->
+            <div style="margin-top: 6rem; margin-bottom: 4rem;">
+                <h2 class="section-title" style="text-align: center; font-size: 2rem; margin-bottom: 3rem;">Why AutoMinds vs. Doing It Yourself</h2>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; color: white;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <th style="text-align: left; padding: 1rem; color: var(--text-muted);">FEATURE</th>
+                                <th style="text-align: left; padding: 1rem; color: #3B82F6;">AUTOMINDS EMAIL ASSISTANT</th>
+                                <th style="text-align: left; padding: 1rem; color: var(--text-muted);">DOING IT MANUALLY</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td style="padding: 1rem;">Time Spent on Email</td>
+                                <td style="padding: 1rem; color: #22c55e;">~20 min/day</td>
+                                <td style="padding: 1rem;">3+ hours/day</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td style="padding: 1rem;">Missed Follow-ups</td>
+                                <td style="padding: 1rem; color: #22c55e;">Zero (automated)</td>
+                                <td style="padding: 1rem;">Happens weekly</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td style="padding: 1rem;">Response Time</td>
+                                <td style="padding: 1rem; color: #22c55e;">Under 5 minutes</td>
+                                <td style="padding: 1rem;">Hours to days</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 1rem;">Cost</td>
+                                <td style="padding: 1rem; color: #22c55e;">From $0/mo (Free tier)</td>
+                                <td style="padding: 1rem;">Your time (≈$50+/hr)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Built For Every Industry -->
+    <section id="mandate" class="mandate-section">
+        <div class="container">
+            <div class="split-layout">
+                <div class="split-col">
+                    <h2 class="section-title-sm">Built For Every Industry</h2>
+                    <ul class="exclusive-list">
+                        <li><strong>Real Estate Agents</strong> — Auto-respond to leads, schedule showings</li>
+                        <li><strong>Law Firms</strong> — Prioritize client emails, draft case updates</li>
+                        <li><strong>Accounting Firms</strong> — Sort tax docs, manage seasonal surges</li>
+                        <li><strong>Healthcare</strong> — Triage patient inquiries, route referrals</li>
+                    </ul>
+                </div>
+                <div class="split-col">
+                    <h2 class="section-title-sm">Your Data, Your Control</h2>
+                    <div class="risk-tiers">
+                        <div class="risk-item">
+                            <span class="risk-label">Encrypted</span>
+                            <span class="risk-desc">Bank-level encryption for all email data</span>
+                        </div>
+                        <div class="risk-item">
+                            <span class="risk-label">Private</span>
+                            <span class="risk-desc">We never store your email content on our servers</span>
+                        </div>
+                        <div class="risk-item">
+                            <span class="risk-label highlight">GDPR Compliant</span>
+                            <span class="risk-desc">Full data privacy compliance</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- What Makes Us Different -->
+    <section id="doctrine" class="doctrine-section">
+        <div class="container">
+            <div class="doctrine-grid">
+                <div class="doctrine-card refusal">
+                    <h3 class="card-header-sm">What Makes Us Different</h3>
+                    <ul class="refusal-list">
+                        <li>AI that learns YOUR writing style, not generic templates</li>
+                        <li>Works with Gmail & Outlook — 2-click setup</li>
+                        <li>No training data sold or shared. Ever.</li>
+                        <li>Cancel anytime. 14-day money-back guarantee.</li>
+                    </ul>
+                    <p class="doctrine-note">Your inbox, your rules.</p>
+                </div>
+                <div class="doctrine-card accountability">
+                    <h3 class="card-header-sm">How Professionals Use It</h3>
+                    <p class="mb-4">Real professionals save real time. Here's what our early users report:</p>
+                    <ul class="check-list">
+                        <li>50+ hours saved per month</li>
+                        <li>99.7% sorting accuracy</li>
+                        <li>Zero missed follow-ups</li>
+                        <li>2-minute average setup time</li>
+                    </ul>
+                    <p class="doctrine-note">"AutoMinds cut my inbox time by 80%."</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Connected in Seconds -->
+    <section class="comparison-section" style="padding: var(--space-xl) 0; border-bottom: 1px solid var(--border);">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Gmail & Outlook. Connected in Seconds.</h2>
+                <p>No IT team needed. No complex setup. Just connect your email and watch the AI go to work.</p>
+            </div>
+
+            <div class="comparison-table" style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-family: 'Inter', sans-serif;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <th style="padding: 1rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; font-size: 0.85rem;">Feature</th>
+                            <th style="padding: 1rem; color: var(--text-primary); font-size: 1.1rem;">AutoMinds</th>
+                            <th style="padding: 1rem; color: var(--text-secondary); font-weight: 400;">Other Email Tools</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td style="padding: 1.5rem 1rem; color: var(--text-secondary); font-weight: 500;">Setup Time</td>
+                            <td style="padding: 1.5rem 1rem; color: #22c55e; font-weight: 600;">2 Minutes</td>
+                            <td style="padding: 1.5rem 1rem; color: var(--text-muted);">Hours to Days</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td style="padding: 1.5rem 1rem; color: var(--text-secondary); font-weight: 500;">AI Draft Quality</td>
+                            <td style="padding: 1.5rem 1rem; color: #22c55e; font-weight: 600;">Learns Your Voice</td>
+                            <td style="padding: 1.5rem 1rem; color: var(--text-muted);">Generic Templates</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td style="padding: 1.5rem 1rem; color: var(--text-secondary); font-weight: 500;">Follow-Up Tracking</td>
+                            <td style="padding: 1.5rem 1rem; color: #22c55e; font-weight: 600;">Fully Automated</td>
+                            <td style="padding: 1.5rem 1rem; color: var(--text-muted);">Manual or None</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 1.5rem 1rem; color: var(--text-secondary); font-weight: 500;">Free Plan</td>
+                            <td style="padding: 1.5rem 1rem; color: #22c55e; font-weight: 600;">Yes — 50 actions/mo</td>
+                            <td style="padding: 1.5rem 1rem; color: var(--text-muted);">Limited or None</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="pricing-section" style="padding: var(--space-xl) 0; background: var(--bg-surface);">
+        <div class="container">
+            <div class="section-header center-text">
+                <h2 class="section-title">Simple, Transparent Pricing</h2>
+                <p>Start free. Upgrade when you're ready. Cancel anytime.</p>
+            </div>
+
+            <div class="bento-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                <!-- Free Tier -->
+                <div class="bento-card" style="border: 1px solid var(--border);">
+                    <div class="card-content">
+                        <div style="margin-bottom: 1rem; font-family: 'Roboto Mono'; font-size: 0.8rem; color: var(--text-muted);">FREE</div>
+                        <h3>Starter</h3>
+                        <p style="margin-bottom: 1rem;">Try it out — no credit card required.</p>
+                        <div style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 1.5rem;">$0<span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/month</span></div>
+                        <ul class="check-list" style="margin-bottom: auto;">
+                            <li>50 email actions/month</li>
+                            <li>Basic inbox sorting</li>
+                            <li>1 email account</li>
+                            <li>Email support</li>
+                        </ul>
+                        <a href="/auth/google" class="btn btn-secondary btn-connect" style="width: 100%; margin-top: 2rem;">Get Started Free</a>
+                        <a href="/static/dashboard.html" class="btn btn-secondary btn-dashboard" style="width: 100%; margin-top: 2rem;">Open Dashboard</a>
+                    </div>
+                </div>
+
+                <!-- Pro Tier (Featured) -->
+                <div class="bento-card" style="border: 1px solid #3B82F6; background: rgba(59, 130, 246, 0.05);">
+                    <div class="card-content">
+                        <div style="margin-bottom: 1rem; font-family: 'Roboto Mono'; font-size: 0.8rem; color: #60A5FA;">MOST POPULAR</div>
+                        <h3>Pro</h3>
+                        <p style="margin-bottom: 1rem;">For professionals who live in their inbox.</p>
+                        <div style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 1.5rem;">$29<span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/month</span></div>
+                        <ul class="check-list" style="margin-bottom: auto;">
+                            <li>Unlimited email actions</li>
+                            <li>AI draft replies</li>
+                            <li>Follow-up scheduling</li>
+                            <li>Thread summaries</li>
+                            <li>Priority flagging</li>
+                            <li>Priority support</li>
+                        </ul>
+                        <a href="/auth/google" class="btn btn-primary btn-connect" style="width: 100%; margin-top: 2rem;">Start Pro Trial →</a>
+                        <a href="/static/dashboard.html" class="btn btn-primary btn-dashboard" style="width: 100%; margin-top: 2rem;">Open Dashboard</a>
+                    </div>
+                </div>
+
+                <!-- Business Tier -->
+                <div class="bento-card" style="border: 1px solid var(--border);">
+                    <div class="card-content">
+                        <div style="margin-bottom: 1rem; font-family: 'Roboto Mono'; font-size: 0.8rem; color: var(--text-muted);">TEAMS</div>
+                        <h3>Business</h3>
+                        <p style="margin-bottom: 1rem;">For teams that need full control.</p>
+                        <div style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 1.5rem;">$99<span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/month</span></div>
+                        <ul class="check-list" style="margin-bottom: auto;">
+                            <li>Everything in Pro</li>
+                            <li>Multi-inbox support</li>
+                            <li>Team collaboration</li>
+                            <li>Custom AI rules</li>
+                            <li>Analytics dashboard</li>
+                            <li>Dedicated support</li>
+                        </ul>
+                        <a href="https://calendly.com/admin-autominds/30min" class="btn btn-secondary" style="width: 100%; margin-top: 2rem;">Contact Sales</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section id="protocol" class="protocol-section">
+        <div class="container">
+            <div class="section-header center-text">
+                <h2 class="section-title">How It Works</h2>
+                <p>From signup to inbox zen in three simple steps.</p>
+            </div>
+            <div class="protocol-steps">
+                <div class="step">
+                    <span class="step-num">01</span>
+                    <h4>Connect Your Email</h4>
+                    <p>Gmail or Outlook — two clicks and you're linked. No IT team needed.</p>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step">
+                    <span class="step-num">02</span>
+                    <h4>Set Your Preferences</h4>
+                    <p>Tell the AI your rules, tone, and priorities. It learns and adapts to you.</p>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step">
+                    <span class="step-num">03</span>
+                    <h4>Watch It Work</h4>
+                    <p>Your inbox is sorted, drafted, and managed — automatically. You just review and send.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Testimonials -->
+        <section class="testimonials" style="border-top: 1px solid var(--border); padding: 4rem 0;">
+            <div class="container" style="text-align: center;">
+                <p style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); margin-bottom: 2rem;">
+                    What Professionals Are Saying</p>
+
+                <div class="testimonial-card"
+                    style="max-width: 800px; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%); border: 1px solid var(--border); padding: 3rem; border-radius: 2px;">
+                    <blockquote
+                        style="font-size: 1.25rem; font-weight: 400; line-height: 1.6; color: var(--text-primary); margin: 0; font-family: 'Inter', sans-serif;">
+                        "I used to spend 2 hours a day on email. Now it's 15 minutes. <br>
+                        AutoMinds drafts replies that sound exactly like me — my clients can't tell the difference."
+                    </blockquote>
+                    <div style="margin-top: 2rem; display: flex; align-items: center; justify-content: center; gap: 1rem;">
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">— Licensed Real Estate Agent, Virginia</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer id="contact">
+            <div class="container">
+                <p><span class="status-pulse"></span> &copy; 2026 AutoMinds LLC. AI Email Assistant for Professionals.</p>
+                <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);"><a href="mailto:admin@autominds.org" style="color: var(--text-secondary);">admin@autominds.org</a> &nbsp;|&nbsp; <a href="https://calendly.com/admin-autominds/30min" style="color: var(--text-secondary);">Book a Demo</a></p>
+            </div>
+        </footer>
+
+        <!-- Theme Toggle -->
+        <script>
+            const toggleBtn = document.getElementById('themedev-toggle');
+            const sunIcon = document.querySelector('.theme-icon-sun');
+            const moonIcon = document.querySelector('.theme-icon-moon');
+            const body = document.body;
+
+            if (localStorage.getItem('theme') === 'light') {
+                body.classList.add('light-mode');
+                sunIcon.style.display = 'none';
+                moonIcon.style.display = 'block';
+            }
+
+            toggleBtn.addEventListener('click', () => {
+                body.classList.toggle('light-mode');
+                if (body.classList.contains('light-mode')) {
+                    localStorage.setItem('theme', 'light');
+                    sunIcon.style.display = 'none';
+                    moonIcon.style.display = 'block';
+                } else {
+                    localStorage.setItem('theme', 'dark');
+                    sunIcon.style.display = 'block';
+                    moonIcon.style.display = 'none';
+                }
+            });
+        </script>
+
+        <!-- Auto-detect logged in user -->
+        <script>
+            (function() {
+                const userId = localStorage.getItem('autominds_user_id');
+                if (userId) {
+                    document.body.classList.add('logged-in');
+                }
+            })();
+        </script>
+
+        <script src="/static/js/background-paths.js"></script>
 </body>
+
 </html>

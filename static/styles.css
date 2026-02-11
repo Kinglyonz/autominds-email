@@ -1,0 +1,1070 @@
+/* AutoMinds 'Operator' Theme - Titanium & Glass */
+
+:root {
+    /* Monochrome Palette */
+    --bg-main: #000000;
+    --bg-surface: #0A0A0A;
+    --bg-glass: rgba(255, 255, 255, 0.03);
+
+    /* Text */
+    --text-primary: #FFFFFF;
+    --text-secondary: #A1A1AA;
+    /* Zinc 400 */
+    --text-muted: #52525B;
+    /* Zinc 600 */
+
+    /* Accents */
+    --accent: #FFFFFF;
+    /* Electric White */
+    --border: rgba(255, 255, 255, 0.1);
+    --border-hover: rgba(255, 255, 255, 0.3);
+
+    /* Nav */
+    --nav-bg: rgba(0, 0, 0, 0.7);
+
+    /* Spacing & Layout */
+    --space-sm: 1rem;
+    --space-md: 2rem;
+    --space-lg: 4rem;
+    --space-xl: 8rem;
+
+    --radius-sm: 4px;
+    --radius-md: 12px;
+    --radius-lg: 24px;
+
+    --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Light Mode Overrides */
+.light-mode {
+    --bg-main: #FFFFFF;
+    --bg-surface: #F4F4F5;
+    /* Zinc 100 */
+    --bg-glass: rgba(0, 0, 0, 0.03);
+
+    --text-primary: #09090B;
+    /* Zinc 950 */
+    --text-secondary: #3F3F46;
+    /* Zinc 700 - Darker for readability */
+    --text-muted: #71717A;
+    /* Zinc 500 */
+
+    --accent: #000000;
+    --border: rgba(0, 0, 0, 0.15);
+    --border-hover: rgba(0, 0, 0, 0.25);
+
+    --nav-bg: rgba(255, 255, 255, 0.9);
+}
+
+/* Invert Logo in Light Mode */
+.light-mode .brand-icon {
+    filter: invert(1);
+}
+
+/* Partner Logo: Default (Dark Mode) -> All White */
+.partner-logo {
+    height: 46px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    transition: all 0.3s ease;
+    opacity: 0.9;
+}
+
+/* Partner Logo: Light Mode -> Original Colors */
+/* Logo Blending */
+/* Logo Blending */
+.blend-logo {
+    /* DARK MODE: 
+       1. grayscale(100%)
+       2. brightness(300%) contrast(500%) - BRUTE FORCE: Threshold to white
+       3. invert(1) - White becomes black
+       4. mix-blend-mode: screen - Black becomes transparent
+    */
+    filter: grayscale(100%) brightness(300%) contrast(500%) invert(1);
+    mix-blend-mode: screen;
+    opacity: 0.9;
+}
+
+/* Light mode overrides */
+.light-mode .blend-logo {
+    /* LIGHT MODE:
+       1. grayscale(100%) ensure neutral colors
+       2. contrast(200%) pushes lieght-gray artifacts to pure white
+       3. mix-blend-mode: multiply makes pure white background transparent
+    */
+    mix-blend-mode: multiply;
+    filter: grayscale(100%) contrast(200%);
+    opacity: 1;
+}
+
+.light-mode .partner-logo {
+    filter: none;
+    opacity: 1;
+}
+
+/* Adjust Nav Background */
+.light-mode .nav {
+    border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: var(--font-main);
+    line-height: 1.5;
+    overflow-x: hidden;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4 {
+    font-weight: 600;
+    /* "Apple-like" tightness but with Jakarta's distinct character */
+    letter-spacing: -0.03em;
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+p {
+    color: var(--text-secondary);
+    font-weight: 400;
+    letter-spacing: 0;
+    /* Neutral, not tight */
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+
+a:hover {
+    opacity: 0.8;
+}
+
+/* Utilities */
+.container {
+    max-width: 1400px;
+    /* Wider, industrial layout */
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+/* ... Buttons ... */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    border-radius: 100px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    letter-spacing: -0.01em;
+    will-change: transform;
+}
+
+.btn:active {
+    transform: scale(0.96);
+}
+
+.btn-primary {
+    background: var(--text-primary);
+    color: var(--bg-main);
+}
+
+.light-mode .btn-primary {
+    background: #000;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid transparent;
+}
+
+.light-mode .btn-secondary {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--text-primary);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.light-mode .btn-secondary:hover {
+    background: rgba(0, 0, 0, 0.12);
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
+/* Navigation */
+.nav {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 100;
+    background: var(--nav-bg);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+}
+
+.nav-wrapper {
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* Pushes logic: Brand (Left) --- Menu (Right) */
+}
+
+.brand {
+    font-size: 1.1rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    /* Technical spacing */
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.brand-icon {
+    width: 32px;
+    /* Increased slightly for the new split circle */
+    height: 32px;
+    background: url('logo_white.svg') no-repeat center;
+    background-size: contain;
+}
+
+.nav-menu {
+    display: flex;
+    gap: 2rem;
+    margin-left: auto;
+    /* Force push to right just in case */
+}
+
+.nav-link {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    position: relative;
+    padding-bottom: 2px;
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 1px;
+    background: var(--text-primary);
+    transition: width 0.3s ease, left 0.3s ease;
+}
+
+.nav-link:hover {
+    color: var(--text-primary);
+}
+
+.nav-link:hover::after {
+    width: 100%;
+    left: 0;
+}
+
+/* Hero Section */
+.hero {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    position: relative;
+    padding-top: 60px;
+    overflow: hidden;
+    /* Ensure canvas doesn't overflow */
+    /* Offset fixed nav */
+}
+
+.hero-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    /* Behind content */
+    pointer-events: none;
+}
+
+/* Subtle Grid Background - Replaces Orbs */
+.hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 100px 100px;
+    opacity: 0.05;
+    pointer-events: none;
+    z-index: -1;
+    mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+    -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+}
+
+.light-mode .hero::before {
+    opacity: 0.1;
+    /* Slightly more visible in light mode */
+}
+
+.hero-content {
+    max-width: 800px;
+    animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-Eyebrow {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    display: block;
+}
+
+.hero-title {
+    font-size: clamp(3rem, 8vw, 6rem);
+    line-height: 1;
+    margin-bottom: 1.5rem;
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.04em;
+    background: linear-gradient(180deg, #E0F2FF 0%, #3B82F6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+}
+
+.light-mode .hero-title {
+    background: linear-gradient(180deg, #18181B 0%, #2563EB 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+}
+
+.hero-subtitle {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto 3rem;
+}
+
+.hero-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+/* Capabilities (Services) - Bento Grid */
+.capabilities {
+    padding: var(--space-xl) 0;
+    border-top: 1px solid var(--border);
+}
+
+.section-header {
+    margin-bottom: var(--space-lg);
+    max-width: 600px;
+}
+
+.section-title {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.bento-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: minmax(300px, auto);
+    gap: 1.5rem;
+}
+
+.bento-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: border-color 0.3s ease;
+    overflow: hidden;
+    position: relative;
+    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+    will-change: transform;
+}
+
+.light-mode .bento-card {
+    background: #fff;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+/* Product Badges */
+.product-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+}
+
+.feature-list li {
+    margin-bottom: 0.5rem;
+}
+
+.btn-secondary-sm {
+    background: transparent;
+    border: 1px solid #3B82F6;
+    color: #3B82F6;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: all 0.2s;
+    display: inline-block;
+}
+
+.btn-secondary-sm:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.bento-card:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
+}
+
+.light-mode .bento-card:hover {
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05);
+}
+
+.card-content h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.card-content p {
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+/* Special Spans for Bento */
+.span-2 {
+    grid-column: span 2;
+}
+
+.span-vertical {
+    grid-row: span 2;
+}
+
+/* Doctrine Section */
+.doctrine {
+    padding: var(--space-xl) 0;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.doctrine-content {
+    display: flex;
+    align-items: center;
+    gap: 4rem;
+}
+
+.doctrine-text {
+    flex: 1;
+}
+
+.blockquote {
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--text-primary);
+    margin-bottom: 2rem;
+}
+
+.blockquote cite {
+    display: block;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: normal;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+/* Footer */
+footer {
+    padding: var(--space-lg) 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 1rem;
+    }
+
+    /* Stack the grid */
+    .bento-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        gap: 1.5rem;
+    }
+
+    .span-2,
+    .span-vertical {
+        grid-column: span 1;
+        grid-row: span 1;
+    }
+
+    /* Hero adjustments */
+    .hero {
+        padding-top: 80px;
+        height: auto;
+        min-height: auto;
+        padding-bottom: 3rem;
+    }
+
+    .hero-title {
+        font-size: 2rem;
+        line-height: 1.1;
+    }
+
+    .hero-subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+        line-height: 1.5;
+    }
+    
+    .hero-Eyebrow {
+        font-size: 0.75rem;
+    }
+
+    .hero-actions {
+        flex-direction: column;
+        gap: 0.75rem;
+        width: 100%;
+        max-width: 280px;
+        margin: 0 auto;
+    }
+
+    .btn {
+        width: 100%;
+        padding: 12px 20px;
+        font-size: 0.9rem;
+    }
+
+    .bento-card {
+        padding: 1.25rem;
+    }
+    
+    .bento-card h3 {
+        font-size: 1.25rem;
+    }
+    
+    .bento-card p {
+        font-size: 0.85rem;
+    }
+
+    /* Nav adjustments - HAMBURGER MENU */
+    .nav {
+        padding: 0.5rem 0;
+    }
+    
+    .nav-wrapper {
+        padding: 0 1rem;
+    }
+
+    .brand {
+        font-size: 0.9rem;
+    }
+    
+    .brand-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .nav-menu {
+        gap: 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .nav-link {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.7rem;
+    }
+    
+    /* Section headers */
+    .section-title {
+        font-size: 1.5rem;
+    }
+    
+    .section-header p {
+        font-size: 0.85rem;
+    }
+    
+    /* Tables */
+    table {
+        font-size: 0.75rem;
+    }
+    
+    table th, table td {
+        padding: 0.5rem !important;
+    }
+    
+    /* Product badges */
+    .product-badge {
+        font-size: 0.65rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* Price display */
+    .bento-card .price,
+    .bento-card [style*="font-size: 1.5rem"] {
+        font-size: 1.25rem !important;
+    }
+    
+    /* Feature lists */
+    .feature-list, .check-list {
+        font-size: 0.8rem;
+    }
+    
+    .feature-list li, .check-list li {
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- Strategic Additions (Mandate, Doctrine, Protocol) --- */
+
+/* Mandate Section */
+.mandate-section {
+    padding: var(--space-xl) 0;
+    border-top: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--bg-main) 0%, var(--bg-surface) 100%);
+}
+
+.light-mode .mandate-section {
+    background: linear-gradient(180deg, #FFFFFF 0%, #F4F4F5 100%);
+}
+
+.split-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+}
+
+.section-title-sm {
+    font-size: 1.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+}
+
+.exclusive-list {
+    list-style: none;
+}
+
+.exclusive-list li {
+    font-size: 1.1rem;
+    padding: 1rem 0;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.light-mode .exclusive-list li {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.exclusive-list li strong {
+    color: var(--text-primary);
+}
+
+.risk-tiers {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.risk-item {
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: all 0.3s ease;
+}
+
+.light-mode .risk-item {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.risk-item:hover {
+    border-color: var(--border-hover);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.light-mode .risk-item:hover {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+.risk-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.risk-label.highlight {
+    color: #60A5FA;
+    /* Blue-400 */
+    text-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
+}
+
+.risk-desc {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Doctrine Section */
+.doctrine-section {
+    padding: var(--space-xl) 0;
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+
+.doctrine-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.doctrine-card {
+    padding: 3rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.light-mode .doctrine-card {
+    background: #fff;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.doctrine-card.refusal {
+    border-color: rgba(239, 68, 68, 0.2);
+    /* Red-500 tint */
+}
+
+.doctrine-card.accountability {
+    border-color: rgba(96, 165, 250, 0.2);
+    /* Blue-400 tint */
+}
+
+.card-header-sm {
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+    color: var(--text-primary);
+}
+
+.refusal-list,
+.check-list {
+    list-style: none;
+    margin-bottom: 2rem;
+}
+
+.refusal-list li,
+.check-list li {
+    position: relative;
+    padding-left: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+}
+
+.refusal-list li::before {
+    content: '×';
+    position: absolute;
+    left: 0;
+    color: #EF4444;
+    font-weight: bold;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.check-list li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: #3B82F6;
+    font-weight: bold;
+}
+
+.doctrine-note {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-family: 'Roboto Mono', monospace;
+}
+
+/* Protocol Section */
+.protocol-section {
+    padding: var(--space-xl) 0;
+    border-top: 1px solid var(--border);
+    background: var(--bg-main);
+}
+
+.center-text {
+    text-align: center;
+    margin: 0 auto 4rem;
+}
+
+.protocol-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.step {
+    flex: 1;
+    text-align: center;
+    padding: 0 1rem;
+}
+
+.step-num {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 3rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.05);
+    display: block;
+    margin-bottom: 1rem;
+    line-height: 1;
+}
+
+.light-mode .step-num {
+    color: rgba(0, 0, 0, 0.05);
+}
+
+.step h4 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.step p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.step-connector {
+    flex: 0 0 100px;
+    height: 1px;
+    background: var(--border);
+    margin-top: 3.5rem;
+    /* Align with middle of numbers roughly */
+}
+
+/* Responsive Additions */
+@media (max-width: 768px) {
+
+    .split-layout,
+    .doctrine-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    .protocol-steps {
+        flex-direction: column;
+        gap: 3rem;
+    }
+
+    .step-connector {
+        width: 1px;
+        height: 50px;
+        margin: 0 auto;
+    }
+
+    /* System Status Pulse Mobile */
+    .status-pulse {
+        margin-right: 6px;
+    }
+
+    /* Comparison Table Horizontal Scroll */
+    .comparison-table {
+        margin: 0 -1rem;
+        padding: 0 1rem;
+        -webkit-overflow-scrolling: touch;
+        overflow-x: auto;
+    }
+
+    .comparison-table table {
+        min-width: 500px;
+    }
+
+    /* Pricing Section */
+    .pricing-section .bento-grid {
+        gap: 1.5rem;
+    }
+    
+    /* Form inputs */
+    input, select, textarea {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+    }
+    
+    /* Footer */
+    footer {
+        padding: 2rem 1rem;
+    }
+    
+    footer .container {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+}
+
+/* Extra small screens - 480px and below */
+@media (max-width: 480px) {
+    .hero-title {
+        font-size: 1.6rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 0.85rem;
+    }
+    
+    .section-title {
+        font-size: 1.25rem;
+    }
+    
+    .bento-card {
+        padding: 1rem;
+    }
+    
+    .bento-card h3 {
+        font-size: 1.1rem;
+    }
+    
+    .nav-menu {
+        display: none; /* Hide menu on very small screens */
+    }
+    
+    .nav-cta {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+    }
+    
+    .btn {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+    }
+    
+    table th, table td {
+        padding: 0.35rem !important;
+        font-size: 0.7rem;
+    }
+    
+    .step-num {
+        font-size: 2rem;
+    }
+    
+    .step h4 {
+        font-size: 1rem;
+    }
+    
+    .step p {
+        font-size: 0.8rem;
+    }
+}
+
+/* System Status Pulse */
+.status-pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #22c55e;
+    border-radius: 50%;
+    margin-right: 8px;
+    box-shadow: 0 0 0 rgba(34, 197, 94, 0.4);
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    }
+
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+    }
+
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    }
+}

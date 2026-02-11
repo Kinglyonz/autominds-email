@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <mask id="split-mask">
+      <!-- The canvas is white (keep) -->
+      <rect x="0" y="0" width="48" height="48" fill="white"/>
+      <!-- The cut is black (remove) - Diagonal from bottom-left to top-right -->
+      <rect x="-10" y="22" width="68" height="4" transform="rotate(-45 24 24)" fill="black"/>
+    </mask>
+  </defs>
+  
+  <!-- Solid White Circle with the Mask applied -->
+  <!-- R=20 provides a nice margin within the 48px box -->
+  <circle cx="24" cy="24" r="20" fill="white" mask="url(#split-mask)"/>
+</svg>

@@ -51,7 +51,6 @@ def get_google_auth_url(state: str = "") -> str:
 
     auth_url, _ = flow.authorization_url(
         access_type="offline",       # Get refresh token
-        include_granted_scopes="true",
         prompt="consent",            # Force consent to get refresh token
         state=state,
     )
@@ -68,6 +67,9 @@ def exchange_google_code(code: str) -> ConnectedAccount:
     Returns:
         A ConnectedAccount with tokens populated.
     """
+    import os
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+
     flow = Flow.from_client_config(
         client_config={
             "web": {

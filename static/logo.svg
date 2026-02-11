@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Autominds Official Logo: Split Circle - Gradient Version -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B5CF6"/>
+      <stop offset="100%" style="stop-color:#3B82F6"/>
+    </linearGradient>
+    <mask id="split-mask">
+      <!-- The canvas is white (keep) -->
+      <rect x="0" y="0" width="48" height="48" fill="white"/>
+      <!-- The cut is black (remove) - Diagonal from bottom-left to top-right -->
+      <rect x="-10" y="22" width="68" height="4" transform="rotate(-45 24 24)" fill="black"/>
+    </mask>
+  </defs>
+  
+  <!-- Gradient Circle with the Mask applied -->
+  <circle cx="24" cy="24" r="20" fill="url(#logoGradient)" mask="url(#split-mask)"/>
+</svg>
