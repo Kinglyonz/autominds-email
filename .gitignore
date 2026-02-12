@@ -22,6 +22,7 @@ venv/
 # Credentials / tokens
 token.pickle
 credentials.json
+client_secret*.json
 
 # IDE
 .vscode/

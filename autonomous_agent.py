@@ -70,15 +70,37 @@ def _processed_ids_path(user_id: str) -> str:
     return os.path.join(AGENT_STATE_DIR, f"{user_id}_processed.json")
 
 
+def _get_supabase():
+    """Get Supabase client if available."""
+    try:
+        from user_store import _supabase_client, _USE_SUPABASE
+        if _USE_SUPABASE and _supabase_client:
+            return _supabase_client
+    except ImportError:
+        pass
+    return None
+
+
 def _load_processed_ids(user_id: str) -> set:
     """Load the set of already-processed email IDs for a user."""
+    sb = _get_supabase()
+    if sb:
+        try:
+            result = sb.table("agent_state").select("processed_ids").eq("user_id", user_id).execute()
+            if result.data:
+                ids = result.data[0].get("processed_ids", [])
+                return set(ids[-5000:])
+            return set()
+        except Exception as e:
+            logger.warning(f"Supabase agent_state read failed, falling back to disk: {e}")
+
+    # Fallback: disk
     path = _processed_ids_path(user_id)
     if not os.path.exists(path):
         return set()
     try:
         with open(path, "r") as f:
             data = json.load(f)
-        # Keep only the last 5000 IDs to prevent unbounded growth
         return set(data.get("ids", [])[-5000:])
     except (json.JSONDecodeError, OSError):
         return set()
@@ -86,10 +108,23 @@ def _load_processed_ids(user_id: str) -> set:
 
 def _save_processed_ids(user_id: str, ids: set):
     """Persist the processed email IDs set for a user."""
+    trimmed = list(ids)[-5000:]
+
+    sb = _get_supabase()
+    if sb:
+        try:
+            sb.table("agent_state").upsert({
+                "user_id": user_id,
+                "processed_ids": trimmed,
+                "updated_at": datetime.utcnow().isoformat(),
+            }).execute()
+            return
+        except Exception as e:
+            logger.warning(f"Supabase agent_state write failed, falling back to disk: {e}")
+
+    # Fallback: disk
     _ensure_dirs()
     path = _processed_ids_path(user_id)
-    # Keep only the most recent 5000 IDs
-    trimmed = list(ids)[-5000:]
     with open(path, "w") as f:
         json.dump({"ids": trimmed, "updated_at": datetime.utcnow().isoformat()}, f)
 
@@ -529,18 +564,12 @@ class EmailAgent:
     # ── logging ─────────────────────────────────────────
 
     def _log_actions(self):
-        """Save the action log for this cycle to disk.
-
-        File: data/agent_logs/{user_id}_{date}_{time}.json
-        """
-        _ensure_dirs()
+        """Save the action log (Supabase or disk)."""
         elapsed = (datetime.utcnow() - self.cycle_start).total_seconds()
-        timestamp = self.cycle_start.strftime("%Y%m%d_%H%M%S")
-        filename = f"{self.user_id}_{timestamp}.json"
-        filepath = os.path.join(AGENT_LOG_DIR, filename)
 
         log_entry = {
             "user_id": self.user_id,
+            "log_type": "user_cycle",
             "cycle_start": self.cycle_start.isoformat(),
             "cycle_end": datetime.utcnow().isoformat(),
             "elapsed_seconds": round(elapsed, 2),
@@ -550,6 +579,19 @@ class EmailAgent:
             "summary": self.get_summary(),
         }
 
+        sb = _get_supabase()
+        if sb:
+            try:
+                sb.table("agent_logs").insert(log_entry).execute()
+                return
+            except Exception as exc:
+                logger.warning(f"[agent] Supabase log write failed, falling back to disk: {exc}")
+
+        # Fallback: disk
+        _ensure_dirs()
+        timestamp = self.cycle_start.strftime("%Y%m%d_%H%M%S")
+        filename = f"{self.user_id}_{timestamp}.json"
+        filepath = os.path.join(AGENT_LOG_DIR, filename)
         try:
             with open(filepath, "w") as f:
                 json.dump(log_entry, f, indent=2, default=str)

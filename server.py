@@ -24,7 +24,7 @@ from models import (
     AutoSendRuleRequest, HealthResponse, UserSettings,
     DraftStatus,
 )
-import user_store_fix as user_store
+import user_store
 import gmail_provider
 import outlook_provider
 import email_brain
@@ -100,9 +100,9 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-# ─── In-memory draft store (per-session) ─────────────────
+# ─── Draft store (Supabase-backed with in-memory fallback) ─
 
-_drafts: dict[str, dict] = {}  # draft_id -> draft dict
+import draft_store
 
 
 # ─── Health / Root ───────────────────────────────────────
@@ -445,13 +445,14 @@ async def create_draft(user_id: str, request: DraftRequest):
             )
         logger.info(f"Auto-sent reply to {draft.to} (auto-send rule)")
 
-    # Store the draft
-    _drafts[draft.id] = {
-        "draft": draft.model_dump(),
-        "user_id": user_id,
-        "source_provider": source_account.provider.value,
-        "source_email": source_account.email,
-    }
+    # Store the draft (Supabase or in-memory)
+    draft_store.save_draft(
+        draft_id=draft.id,
+        draft_data=draft.model_dump(),
+        user_id=user_id,
+        source_provider=source_account.provider.value,
+        source_email=source_account.email,
+    )
 
     return {
         "draft": draft.model_dump(),
@@ -465,10 +466,7 @@ async def create_draft(user_id: str, request: DraftRequest):
 @app.get("/drafts")
 async def list_drafts(user_id: str):
     """List all pending drafts for a user."""
-    user_drafts = [
-        v["draft"] for v in _drafts.values()
-        if v["user_id"] == user_id
-    ]
+    user_drafts = draft_store.list_user_drafts(user_id)
     return {"user_id": user_id, "count": len(user_drafts), "drafts": user_drafts}
 
 
@@ -478,10 +476,10 @@ async def approve_draft(user_id: str, draft_id: str, edited_body: Optional[str] 
     
     Optionally provide edited_body to modify the draft before sending.
     """
-    if draft_id not in _drafts:
+    draft_data = draft_store.get_draft(draft_id)
+    if not draft_data:
         raise HTTPException(status_code=404, detail="Draft not found")
 
-    draft_data = _drafts[draft_id]
     if draft_data["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not your draft")
 
@@ -513,8 +511,7 @@ async def approve_draft(user_id: str, draft_id: str, edited_body: Optional[str] 
         )
 
     if success:
-        draft["status"] = DraftStatus.SENT.value
-        _drafts[draft_id]["draft"] = draft
+        draft_store.update_draft_status(draft_id, DraftStatus.SENT.value)
         return {"status": "sent", "to": draft["to"], "subject": draft["subject"]}
     else:
         raise HTTPException(status_code=500, detail="Failed to send email")
@@ -523,12 +520,13 @@ async def approve_draft(user_id: str, draft_id: str, edited_body: Optional[str] 
 @app.post("/drafts/{draft_id}/reject")
 async def reject_draft(user_id: str, draft_id: str):
     """Reject/discard a draft."""
-    if draft_id not in _drafts:
+    draft_data = draft_store.get_draft(draft_id)
+    if not draft_data:
         raise HTTPException(status_code=404, detail="Draft not found")
-    if _drafts[draft_id]["user_id"] != user_id:
+    if draft_data["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not your draft")
 
-    _drafts[draft_id]["draft"]["status"] = DraftStatus.REJECTED.value
+    draft_store.update_draft_status(draft_id, DraftStatus.REJECTED.value)
     return {"status": "rejected", "draft_id": draft_id}
 
 

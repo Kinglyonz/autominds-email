@@ -168,7 +168,7 @@ def list_scheduled_jobs() -> list[dict]:
     return jobs
 
 
-# ─── Briefing Storage (simple file-based) ────────────────
+# ─── Briefing Storage (Supabase with file fallback) ──────
 
 import json
 import os
@@ -176,31 +176,62 @@ import os
 BRIEFINGS_DIR = os.path.join(os.path.dirname(__file__), "data", "briefings")
 
 
+def _get_supabase():
+    try:
+        from user_store import _supabase_client, _USE_SUPABASE
+        if _USE_SUPABASE and _supabase_client:
+            return _supabase_client
+    except ImportError:
+        pass
+    return None
+
+
 def _store_briefing(user_id: str, briefing):
-    """Store a briefing for later retrieval."""
-    os.makedirs(BRIEFINGS_DIR, exist_ok=True)
-    
+    """Store a briefing (Supabase or disk)."""
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    briefing_data = briefing.model_dump()
+
+    sb = _get_supabase()
+    if sb:
+        try:
+            sb.table("briefings").upsert({
+                "user_id": user_id,
+                "briefing_date": date_str,
+                "data": json.loads(json.dumps(briefing_data, default=str)),
+            }, on_conflict="user_id,briefing_date").execute()
+            return
+        except Exception as e:
+            logger.warning(f"Supabase briefing store failed, falling back to disk: {e}")
+
+    # Fallback: disk
+    os.makedirs(BRIEFINGS_DIR, exist_ok=True)
     filepath = os.path.join(BRIEFINGS_DIR, f"{user_id}_{date_str}.json")
-    
     with open(filepath, "w") as f:
-        json.dump(briefing.model_dump(), f, indent=2, default=str)
+        json.dump(briefing_data, f, indent=2, default=str)
 
 
 def get_latest_briefing(user_id: str) -> Optional[dict]:
     """Get the most recent briefing for a user."""
+    sb = _get_supabase()
+    if sb:
+        try:
+            result = sb.table("briefings").select("data").eq(
+                "user_id", user_id
+            ).order("briefing_date", desc=True).limit(1).execute()
+            if result.data:
+                return result.data[0]["data"]
+        except Exception as e:
+            logger.warning(f"Supabase briefing read failed, falling back to disk: {e}")
+
+    # Fallback: disk
     if not os.path.exists(BRIEFINGS_DIR):
         return None
-    
-    # Find all briefings for this user, sorted by date
     files = sorted(
         [f for f in os.listdir(BRIEFINGS_DIR) if f.startswith(user_id)],
         reverse=True,
     )
-    
     if not files:
         return None
-    
     filepath = os.path.join(BRIEFINGS_DIR, files[0])
     with open(filepath, "r") as f:
         return json.load(f)
