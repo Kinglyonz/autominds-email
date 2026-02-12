@@ -80,7 +80,7 @@ function logout() {
     localStorage.removeItem('autominds_user_id');
     localStorage.removeItem('autominds_email');
     localStorage.removeItem('autominds_name');
-    window.location.href = '/';
+    window.location.href = '/auth/logout';
 }
 
 // ── Chat ──
@@ -138,19 +138,34 @@ async function sendMessage() {
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', function() {
-    userId = localStorage.getItem('autominds_user_id');
-    const userName = localStorage.getItem('autominds_name');
-    const userEmail = localStorage.getItem('autominds_email');
-    if (!userId) { window.location.href = '/'; return; }
-    const displayName = userName || userEmail || 'User';
-    document.getElementById('user-display-name').textContent = displayName;
-    document.getElementById('user-display-email').textContent = userEmail || '';
-    document.getElementById('user-avatar').textContent = (displayName.charAt(0) || '?').toUpperCase();
-    document.getElementById('briefing-link').href = `/briefing?user_id=${userId}`;
-    fetch(`${API_BASE}/ami/knowledge/status/${userId}`)
-        .then(r => r.json())
+    // Verify server-side session first
+    fetch(`${API_BASE}/auth/check`, { credentials: 'same-origin' })
+        .then(r => {
+            if (!r.ok) {
+                // No valid session — redirect to OAuth
+                localStorage.removeItem('autominds_user_id');
+                window.location.href = '/auth/google';
+                return null;
+            }
+            return r.json();
+        })
         .then(data => {
-            if (data.has_knowledge_base) {
+            if (!data) return;
+            userId = data.user_id;
+            const displayName = data.name || data.email || 'User';
+            // Sync localStorage with session data
+            localStorage.setItem('autominds_user_id', data.user_id);
+            localStorage.setItem('autominds_email', data.email);
+            localStorage.setItem('autominds_name', displayName);
+            document.getElementById('user-display-name').textContent = displayName;
+            document.getElementById('user-display-email').textContent = data.email || '';
+            document.getElementById('user-avatar').textContent = (displayName.charAt(0) || '?').toUpperCase();
+            document.getElementById('briefing-link').href = `/briefing?user_id=${userId}`;
+            return fetch(`${API_BASE}/ami/knowledge/status/${userId}`);
+        })
+        .then(r => r ? r.json() : null)
+        .then(data => {
+            if (data && data.has_knowledge_base) {
                 document.getElementById('index-status').textContent = '✓ Knowledge base active';
                 document.getElementById('index-status').className = 'idx-status success';
             }

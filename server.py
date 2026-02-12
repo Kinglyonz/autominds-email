@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 
 from config import settings
@@ -100,6 +101,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Session middleware (signed cookie) ──────────────────
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.app_secret_key,
+    session_cookie="autominds_session",
+    max_age=60 * 60 * 24 * 30,  # 30 days
+    same_site="lax",
+    https_only=settings.app_env == "production",
+)
+
 
 # ─── Security headers middleware ─────────────────────────
 
@@ -110,6 +122,11 @@ from starlette.responses import Response as StarletteResponse
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
+        # Block direct access to dashboard.html — force through auth gate
+        if request.url.path == "/static/dashboard.html":
+            from starlette.responses import RedirectResponse as SRedirect
+            return SRedirect("/dashboard")
+
         response: StarletteResponse = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
@@ -158,6 +175,26 @@ async def root():
     return RedirectResponse("/docs")
 
 
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Protected dashboard — requires Google OAuth session."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse("/auth/google")
+
+    # Verify the user still exists
+    user = user_store.get_user(user_id)
+    if not user:
+        request.session.clear()
+        return RedirectResponse("/auth/google")
+
+    # Serve the dashboard HTML
+    dashboard_path = STATIC_DIR / "dashboard.html"
+    if not dashboard_path.exists():
+        raise HTTPException(status_code=500, detail="Dashboard not found")
+    return HTMLResponse(content=dashboard_path.read_text(encoding="utf-8"))
+
+
 # ══════════════════════════════════════════════════════════
 # AUTH ROUTES — OAuth flows for Gmail and Outlook
 # ══════════════════════════════════════════════════════════
@@ -171,7 +208,7 @@ async def auth_google():
 
 
 @app.get("/auth/google/callback")
-async def auth_google_callback(code: str, state: str = ""):
+async def auth_google_callback(request: Request, code: str, state: str = ""):
     """Google OAuth callback — exchanges code for tokens, creates/updates user."""
     try:
         account = gmail_provider.exchange_google_code(code)
@@ -195,7 +232,12 @@ async def auth_google_callback(code: str, state: str = ""):
 
         logger.info(f"Gmail connected: {account.email} (user_id={user.id})")
 
-        # Redirect to dashboard with user_id stored
+        # Set server-side session (signed HttpOnly cookie)
+        request.session["user_id"] = user.id
+        request.session["email"] = account.email
+        request.session["name"] = account.display_name or account.email
+
+        # Redirect to dashboard — also set localStorage for UI display
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html><head><title>Connected!</title>
@@ -203,7 +245,7 @@ async def auth_google_callback(code: str, state: str = ""):
             localStorage.setItem('autominds_user_id', '{user.id}');
             localStorage.setItem('autominds_email', '{account.email}');
             localStorage.setItem('autominds_name', '{account.display_name or account.email}');
-            window.location.href = '/static/dashboard.html';
+            window.location.href = '/dashboard';
         </script>
         </head><body style="background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;text-align:center;padding-top:100px;">
         <p>Connecting... redirecting to dashboard.</p>
@@ -227,7 +269,7 @@ async def auth_microsoft():
 
 
 @app.get("/auth/microsoft/callback")
-async def auth_microsoft_callback(code: str, state: str = ""):
+async def auth_microsoft_callback(request: Request, code: str, state: str = ""):
     """Microsoft OAuth callback."""
     try:
         account = outlook_provider.exchange_microsoft_code(code)
@@ -248,27 +290,54 @@ async def auth_microsoft_callback(code: str, state: str = ""):
 
         logger.info(f"Outlook connected: {account.email} (user_id={user.id})")
 
+        # Set server-side session
+        request.session["user_id"] = user.id
+        request.session["email"] = account.email
+        request.session["name"] = account.display_name or account.email
+
+        # Redirect to protected dashboard
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
-        <html>
-        <head><title>Connected!</title>
-        <style>body {{ font-family: sans-serif; max-width: 500px; margin: 80px auto;
-               text-align: center; background: #0a0a0a; color: #e0e0e0; }}
-               .success {{ color: #00ff88; font-size: 48px; }}
-               a {{ color: #00d4ff; }}</style></head>
-        <body>
-            <div class="success">✓</div>
-            <h1>Outlook Connected!</h1>
-            <p><strong>Email:</strong> {account.email}</p>
-            <p><strong>User ID:</strong> {user.id}</p>
-            <p><a href="/emails?user_id={user.id}">View your emails</a> |
-               <a href="/briefing?user_id={user.id}">Generate briefing</a></p>
+        <html><head><title>Connected!</title>
+        <script>
+            localStorage.setItem('autominds_user_id', '{user.id}');
+            localStorage.setItem('autominds_email', '{account.email}');
+            localStorage.setItem('autominds_name', '{account.display_name or account.email}');
+            window.location.href = '/dashboard';
+        </script>
+        </head><body style="background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;text-align:center;padding-top:100px;">
+        <p>Connecting... redirecting to dashboard.</p>
         </body></html>
         """)
 
     except Exception as e:
         logger.error(f"Microsoft OAuth callback error: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"OAuth error: {str(e)}")
+
+
+@app.get("/auth/check")
+async def auth_check(request: Request):
+    """Check if user has a valid session."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return JSONResponse({"authenticated": False}, status_code=401)
+    user = user_store.get_user(user_id)
+    if not user:
+        request.session.clear()
+        return JSONResponse({"authenticated": False}, status_code=401)
+    return {
+        "authenticated": True,
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.name,
+    }
+
+
+@app.get("/auth/logout")
+async def auth_logout(request: Request):
+    """Clear session and redirect to landing page."""
+    request.session.clear()
+    return RedirectResponse("/")
 
 
 # ══════════════════════════════════════════════════════════
