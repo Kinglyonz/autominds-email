@@ -66,20 +66,20 @@ class Settings(BaseSettings):
 
     # --- Email Processing ---
     max_emails_per_fetch: int = 50
-    max_email_body_chars: int = 3000  # Truncate body to control Claude costs
-    briefing_max_emails: int = 25
+    max_email_body_chars: int = 1500  # Truncate body to control Claude costs
+    briefing_max_emails: int = 15
 
     # --- Claude Models (hybrid routing) ---
-    # Opus 4.6 for complex analysis, briefing, draft replies
-    claude_model: str = "claude-opus-4-6"
-    claude_max_tokens: int = 4096
-    # Haiku 4.5 for simple/cheap tasks (spam detection, read-receipts, labeling)
-    claude_fast_model: str = "claude-haiku-4-5-20251001"
-    claude_fast_max_tokens: int = 1024
+    # Sonnet 4 for analysis, briefing, draft replies (~5x cheaper than Opus)
+    claude_model: str = "claude-sonnet-4-20250514"
+    claude_max_tokens: int = 2048
+    # Haiku 3.5 for simple/cheap tasks (spam detection, read-receipts, labeling)
+    claude_fast_model: str = "claude-3-5-haiku-20241022"
+    claude_fast_max_tokens: int = 512
 
     # --- Costs ---
-    # Estimated cost per email processed (Opus = ~$0.04, Haiku = ~$0.003)
-    estimated_cost_per_email_usd: float = 0.04
+    # Estimated cost per email processed (Sonnet = ~$0.008, Haiku = ~$0.002)
+    estimated_cost_per_email_usd: float = 0.008
 
     class Config:
         env_file = ".env"

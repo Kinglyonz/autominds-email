@@ -49,20 +49,18 @@ def _get_async_client() -> anthropic.AsyncAnthropic:
 
 
 def _call_opus(system: str, prompt: str, max_tokens: int = None) -> str:
-    """Call Claude Opus 4.6 with adaptive thinking enabled.
+    """Call Claude Sonnet 4 for analysis tasks.
     
-    Adaptive thinking lets Claude auto-decide how hard to think per task.
-    Simple email? Light thinking. Complex analysis? Deep reasoning.
+    Cost-optimized: no extended thinking, capped tokens.
     """
     client = _get_client()
     response = client.messages.create(
         model=settings.claude_model,
         max_tokens=max_tokens or settings.claude_max_tokens,
-        thinking={"type": "adaptive"},
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
-    # Extract text from response (may have thinking + text blocks)
+    # Extract text from response
     for block in response.content:
         if block.type == "text":
             return block.text.strip()
@@ -85,12 +83,11 @@ def _call_haiku(system: str, prompt: str, max_tokens: int = None) -> str:
 
 
 async def _async_call_opus(system: str, prompt: str, max_tokens: int = None) -> str:
-    """Async version of Opus call — for parallel operations."""
+    """Async version of Sonnet call — for parallel operations."""
     client = _get_async_client()
     response = await client.messages.create(
         model=settings.claude_model,
         max_tokens=max_tokens or settings.claude_max_tokens,
-        thinking={"type": "adaptive"},
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -170,8 +167,8 @@ def analyze_emails(
             "from_name": email.sender.name,
             "from_email": email.sender.email,
             "subject": email.subject,
-            "snippet": email.snippet[:300],
-            "body_preview": email.body_text[:800] if email.body_text else email.snippet,
+            "snippet": email.snippet[:200],
+            "body_preview": email.body_text[:500] if email.body_text else email.snippet,
             "date": email.date.isoformat(),
             "has_attachments": email.has_attachments,
             "is_known_vip": email.sender.email.lower() in [v.lower() for v in vip_contacts],

@@ -89,18 +89,87 @@
 
     <!-- Panel: Inbox Pilot -->
     <div id="panel-inbox" class="panel hidden">
-        <div class="center-panel">
-            <div class="feature-card inbox-glow">
-                <div class="card-icon inbox-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg></div>
-                <h3>Inbox Pilot</h3>
-                <p>Your email intelligence runs in the background — scanning, sorting, and summarizing your inbox automatically.</p>
-                <div class="tags">
-                    <span class="tag tag-green">Smart Sorting</span>
-                    <span class="tag tag-green">Auto-Draft</span>
-                    <span class="tag tag-green">Daily Briefing</span>
-                    <span class="tag tag-green">Priority Detection</span>
+        <!-- Inbox sub-tabs -->
+        <div class="inbox-tabs">
+            <button class="inbox-tab active" data-tab="emails" onclick="switchInboxTab('emails')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+                Inbox <span class="tab-count" id="email-count">—</span>
+            </button>
+            <button class="inbox-tab" data-tab="briefing" onclick="switchInboxTab('briefing')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+                Briefing
+            </button>
+            <button class="inbox-tab" data-tab="drafts" onclick="switchInboxTab('drafts')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Drafts <span class="tab-count" id="draft-count">—</span>
+            </button>
+            <button class="inbox-tab" data-tab="agent" onclick="switchInboxTab('agent')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                Agent
+            </button>
+            <div class="tab-actions">
+                <button class="btn-refresh" onclick="refreshInbox()" title="Refresh">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Sub-tab: Emails -->
+        <div id="inbox-emails" class="inbox-content active">
+            <div id="email-list" class="email-list">
+                <div class="inbox-loading" id="email-loading">
+                    <div class="loader-ring"></div>
+                    <span>Loading your inbox...</span>
                 </div>
-                <a href="/briefing?user_id=" id="briefing-link" class="btn-glow green">View Latest Briefing</a>
+            </div>
+            <!-- Email detail view (hidden by default) -->
+            <div id="email-detail" class="email-detail hidden">
+                <button class="btn-back" onclick="closeEmailDetail()">← Back to inbox</button>
+                <div id="email-detail-content"></div>
+            </div>
+        </div>
+
+        <!-- Sub-tab: Briefing -->
+        <div id="inbox-briefing" class="inbox-content">
+            <div id="briefing-content" class="briefing-content">
+                <div class="inbox-loading" id="briefing-loading">
+                    <div class="loader-ring"></div>
+                    <span>Generating your briefing...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sub-tab: Drafts -->
+        <div id="inbox-drafts" class="inbox-content">
+            <div id="drafts-list" class="drafts-list">
+                <div class="inbox-loading" id="drafts-loading">
+                    <div class="loader-ring"></div>
+                    <span>Loading drafts...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sub-tab: Agent -->
+        <div id="inbox-agent" class="inbox-content">
+            <div class="agent-panel">
+                <div class="agent-status-card" id="agent-status-card">
+                    <div class="agent-header">
+                        <div class="agent-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9-11h2m18 0h2m-3.64-6.36l-1.42 1.42M6.34 17.66l-1.42 1.42m0-12.73l1.42 1.42m11.31 11.31l1.42 1.42"/></svg></div>
+                        <div>
+                            <h3>Autonomous Agent</h3>
+                            <p class="agent-desc">Scans your inbox, drafts replies, and creates tasks automatically.</p>
+                        </div>
+                    </div>
+                    <div class="agent-stats" id="agent-stats">
+                        <div class="stat-item"><span class="stat-label">Status</span><span class="stat-value" id="agent-enabled">—</span></div>
+                        <div class="stat-item"><span class="stat-label">Last Run</span><span class="stat-value" id="agent-last-run">—</span></div>
+                        <div class="stat-item"><span class="stat-label">Emails Processed</span><span class="stat-value" id="agent-processed">—</span></div>
+                    </div>
+                    <button class="btn-glow green agent-btn" onclick="runAgentNow()" id="run-agent-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Run Agent Now
+                    </button>
+                </div>
             </div>
         </div>
     </div>
