@@ -326,9 +326,9 @@ class EmailAgent:
         
         Uses the routing pattern:
         1. Quick classify with Haiku (cheap) — filter spam/newsletters
-        2. Deep analysis with Opus 4.6 (smart) — only on emails that matter
+        2. Deep analysis with Sonnet 4 (smart) — only on emails that matter
         
-        This saves ~60% on API costs vs analyzing everything with Opus.
+        This saves ~60% on API costs vs analyzing everything with Sonnet.
         """
         from email_brain import analyze_emails, quick_classify
 
@@ -363,10 +363,10 @@ class EmailAgent:
             if skippable:
                 logger.info(
                     f"[agent] Quick classify: {len(skippable)} spam/newsletters skipped, "
-                    f"{len(worth_analyzing)} sent to Opus for deep analysis"
+                    f"{len(worth_analyzing)} sent to Sonnet for deep analysis"
                 )
 
-            # Step 2: Deep analysis with Opus 4.6 (only emails that matter)
+            # Step 2: Deep analysis with Sonnet 4 (only emails that matter)
             if worth_analyzing:
                 analyzed = analyze_emails(worth_analyzing, vip_contacts=vip_contacts)
             else:
@@ -376,7 +376,7 @@ class EmailAgent:
 
         except Exception as exc:
             logger.error(f"[agent] Analysis pipeline failed: {exc}", exc_info=True)
-            # Fallback: try Opus on everything
+            # Fallback: try Sonnet on everything
             try:
                 return analyze_emails(emails, vip_contacts=vip_contacts)
             except Exception:

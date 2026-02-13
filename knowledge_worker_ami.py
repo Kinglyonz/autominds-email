@@ -20,6 +20,7 @@ import google_drive_skill
 import rag_engine_skill
 import user_store
 from config import settings
+from models import EmailProvider
 
 logger = logging.getLogger("ami.knowledge-worker")
 
@@ -42,7 +43,7 @@ def sync_user_drive_folder(user_id: str, folder_id: str) -> dict:
     # Find the Google account
     google_account = None
     for account in user.connected_accounts:
-        if account.provider == "google":
+        if account.provider == EmailProvider.GMAIL:
             google_account = account
             break
 

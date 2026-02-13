@@ -6,6 +6,9 @@ All settings loaded from environment variables.
 from pydantic_settings import BaseSettings
 from typing import Optional
 import os
+import logging
+
+_config_logger = logging.getLogger("autominds.config")
 
 
 class Settings(BaseSettings):
@@ -70,7 +73,7 @@ class Settings(BaseSettings):
     briefing_max_emails: int = 15
 
     # --- Claude Models (hybrid routing) ---
-    # Sonnet 4 for analysis, briefing, draft replies (~5x cheaper than Opus)
+    # Sonnet 4 for analysis, briefing, draft replies
     claude_model: str = "claude-sonnet-4-20250514"
     claude_max_tokens: int = 2048
     # Haiku 3.5 for simple/cheap tasks (spam detection, read-receipts, labeling)
@@ -81,6 +84,12 @@ class Settings(BaseSettings):
     # Estimated cost per email processed (Sonnet = ~$0.008, Haiku = ~$0.002)
     estimated_cost_per_email_usd: float = 0.008
 
+    # --- Admin ---
+    admin_api_key: str = ""  # Set ADMIN_API_KEY env var to protect /admin routes
+
+    # --- Rate Limiting ---
+    rate_limit_per_minute: int = 30  # Max requests per minute per IP
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -88,3 +97,15 @@ class Settings(BaseSettings):
 
 # Singleton instance
 settings = Settings()
+
+# Startup security warnings
+if settings.app_secret_key == "dev-secret-change-in-production":
+    _config_logger.warning(
+        "\u26a0\ufe0f  APP_SECRET_KEY is using the default dev value! "
+        "Set APP_SECRET_KEY env var in production to prevent session forgery."
+    )
+if not settings.admin_api_key:
+    _config_logger.warning(
+        "\u26a0\ufe0f  ADMIN_API_KEY is not set! Admin routes (/admin/*) will reject all requests. "
+        "Set ADMIN_API_KEY env var to enable admin access."
+    )

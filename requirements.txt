@@ -29,6 +29,9 @@ cryptography==44.0.0
 python-jose[cryptography]==3.3.0
 itsdangerous==2.2.0
 
+# Rate limiting
+slowapi==0.1.9
+
 # Utilities
 jinja2==3.1.5
 python-multipart==0.0.18

@@ -1,7 +1,7 @@
 """
-AutoMinds Email Assistant - AI Email Brain (Opus 4.6 Edition)
-Uses Claude Opus 4.6 with adaptive thinking, evaluator-optimizer loops,
-and hybrid model routing (Opus for complex, Haiku for simple).
+AutoMinds Email Assistant - AI Email Brain
+Uses Claude Sonnet 4 with evaluator-optimizer loops
+and hybrid model routing (Sonnet for complex, Haiku for simple).
 
 Patterns used (from Anthropic's agent playbook):
   1. Routing — classify emails → send to right model
@@ -48,7 +48,7 @@ def _get_async_client() -> anthropic.AsyncAnthropic:
     return _async_client
 
 
-def _call_opus(system: str, prompt: str, max_tokens: int = None) -> str:
+def _call_sonnet(system: str, prompt: str, max_tokens: int = None) -> str:
     """Call Claude Sonnet 4 for analysis tasks.
     
     Cost-optimized: no extended thinking, capped tokens.
@@ -70,7 +70,7 @@ def _call_opus(system: str, prompt: str, max_tokens: int = None) -> str:
 def _call_haiku(system: str, prompt: str, max_tokens: int = None) -> str:
     """Call Claude Haiku 4.5 for simple/cheap tasks.
     
-    ~8x cheaper than Opus. Use for spam detection, labeling, simple classification.
+    ~8x cheaper than Sonnet. Use for spam detection, labeling, simple classification.
     """
     client = _get_client()
     response = client.messages.create(
@@ -82,7 +82,7 @@ def _call_haiku(system: str, prompt: str, max_tokens: int = None) -> str:
     return response.content[0].text.strip()
 
 
-async def _async_call_opus(system: str, prompt: str, max_tokens: int = None) -> str:
+async def _async_call_sonnet(system: str, prompt: str, max_tokens: int = None) -> str:
     """Async version of Sonnet call — for parallel operations."""
     client = _get_async_client()
     response = await client.messages.create(
@@ -111,7 +111,7 @@ async def _async_call_haiku(system: str, prompt: str, max_tokens: int = None) ->
 
 # ─── Email Analysis ──────────────────────────────────────
 
-ANALYSIS_SYSTEM_PROMPT = """You are an expert email assistant powered by Claude Opus 4.6. You analyze emails with deep reasoning and return structured JSON.
+ANALYSIS_SYSTEM_PROMPT = """You are an expert email assistant powered by Claude. You analyze emails with deep reasoning and return structured JSON.
 
 For EACH email, determine:
 1. priority: "urgent" | "high" | "normal" | "low"
@@ -141,11 +141,11 @@ def analyze_emails(
     emails: list[EmailMessage],
     vip_contacts: list[str] = None,
 ) -> list[EmailMessage]:
-    """Analyze a batch of emails with Claude Opus 4.6 + adaptive thinking.
+    """Analyze a batch of emails with Claude Sonnet 4.
     
     Uses hybrid routing:
     - Quick triage with Haiku first (cheap spam/newsletter detection)
-    - Deep analysis with Opus for anything that matters
+    - Deep analysis with Sonnet for anything that matters
     
     Args:
         emails: List of emails to analyze.
@@ -193,8 +193,8 @@ Emails to analyze:
 Return ONLY the JSON array, nothing else."""
 
     try:
-        # Use Opus 4.6 with adaptive thinking for deep analysis
-        raw_text = _call_opus(ANALYSIS_SYSTEM_PROMPT, prompt)
+        # Use Sonnet 4 for deep analysis
+        raw_text = _call_sonnet(ANALYSIS_SYSTEM_PROMPT, prompt)
 
         # Clean up potential markdown wrapping
         if raw_text.startswith("```"):
@@ -258,11 +258,7 @@ def generate_briefing(
     user_name: str = "",
     user_settings: dict = None,
 ) -> DailyBriefing:
-    """Generate a daily email briefing using Opus 4.6 adaptive thinking.
-    
-    Opus will automatically think harder for complex inboxes and lighter
-    for quiet days — no manual token budget tuning needed.
-    """
+    """Generate a daily email briefing using Claude Sonnet 4."""
     start_time = time.time()
 
     # Categorize emails for the briefing
@@ -304,8 +300,8 @@ Write the briefing with these sections:
 Keep the whole briefing under 500 words. Be specific about names and subjects."""
 
     try:
-        # Use Opus 4.6 with adaptive thinking for intelligent briefing
-        full_text = _call_opus(BRIEFING_SYSTEM_PROMPT, prompt)
+        # Use Sonnet 4 for intelligent briefing
+        full_text = _call_sonnet(BRIEFING_SYSTEM_PROMPT, prompt)
         processing_time = time.time() - start_time
         estimated_cost = len(emails) * settings.estimated_cost_per_email_usd
 
@@ -421,9 +417,9 @@ def draft_reply(
     """Generate an AI draft reply using the Evaluator-Optimizer pattern.
     
     Flow:
-    1. Opus generates initial draft (with adaptive thinking)
+    1. Sonnet generates initial draft
     2. Haiku evaluates the draft quality (cheap, fast)
-    3. If score < 8, Opus rewrites with feedback (one more pass)
+    3. If score < 8, Sonnet rewrites with feedback (one more pass)
     4. Haiku runs safety guardrail check in parallel concept
     
     This produces significantly better drafts than single-pass generation.
@@ -443,9 +439,9 @@ SIGN OFF AS: {user_name or "the sender"}
 Write the reply body only. No subject line. No metadata."""
 
     try:
-        # === STEP 1: Generate initial draft with Opus 4.6 ===
-        draft_body = _call_opus(DRAFT_SYSTEM_PROMPT, prompt)
-        logger.info("Draft v1 generated with Opus 4.6")
+        # === STEP 1: Generate initial draft with Sonnet 4 ===
+        draft_body = _call_sonnet(DRAFT_SYSTEM_PROMPT, prompt)
+        logger.info("Draft v1 generated with Sonnet 4")
 
         # === STEP 2: Evaluate with Haiku (cheap critic) ===
         eval_prompt = f"""Evaluate this email draft reply.
@@ -495,7 +491,7 @@ EVALUATOR FEEDBACK:
 
 Write an improved version that addresses the feedback. Reply body only."""
 
-                draft_body = _call_opus(DRAFT_SYSTEM_PROMPT, rewrite_prompt)
+                draft_body = _call_sonnet(DRAFT_SYSTEM_PROMPT, rewrite_prompt)
                 logger.info(f"Draft v{iteration + 2} generated after feedback")
 
                 # Update eval prompt for next iteration
@@ -594,8 +590,8 @@ Return JSON safety assessment."""
 def quick_classify(emails: list[EmailMessage]) -> list[dict]:
     """Ultra-fast email classification using Haiku 4.5.
     
-    8x cheaper than Opus. Use for:
-    - Spam vs not-spam (before wasting Opus tokens)
+    8x cheaper than Sonnet. Use for:
+    - Spam vs not-spam (before wasting Sonnet tokens)
     - Newsletter detection
     - Simple priority triage
     

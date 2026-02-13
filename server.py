@@ -5,6 +5,8 @@ FastAPI application with OAuth flows, email endpoints, and briefing generation.
 Run: uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 """
 
+import html
+import json as _json
 import logging
 import time
 import uuid
@@ -12,11 +14,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from config import settings
 from models import (
@@ -82,6 +87,10 @@ async def lifespan(app: FastAPI):
     scheduler.stop_scheduler()
 
 
+# ─── Rate Limiter ────────────────────────────────────────
+
+limiter = Limiter(key_func=get_remote_address)
+
 # ─── FastAPI App ─────────────────────────────────────────
 
 app = FastAPI(
@@ -90,6 +99,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -246,13 +258,17 @@ async def auth_google_callback(request: Request, code: str, state: str = ""):
         request.session["name"] = account.display_name or account.email
 
         # Redirect to dashboard — also set localStorage for UI display
+        # Escape all user-controlled data to prevent XSS
+        safe_id = html.escape(user.id, quote=True)
+        safe_email = html.escape(account.email, quote=True)
+        safe_name = html.escape(account.display_name or account.email, quote=True)
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html><head><title>Connected!</title>
         <script>
-            localStorage.setItem('autominds_user_id', '{user.id}');
-            localStorage.setItem('autominds_email', '{account.email}');
-            localStorage.setItem('autominds_name', '{account.display_name or account.email}');
+            localStorage.setItem('autominds_user_id', {_json.dumps(safe_id)});
+            localStorage.setItem('autominds_email', {_json.dumps(safe_email)});
+            localStorage.setItem('autominds_name', {_json.dumps(safe_name)});
             window.location.href = '/dashboard';
         </script>
         </head><body style="background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;text-align:center;padding-top:100px;">
@@ -304,13 +320,17 @@ async def auth_microsoft_callback(request: Request, code: str, state: str = ""):
         request.session["name"] = account.display_name or account.email
 
         # Redirect to protected dashboard
+        # Escape all user-controlled data to prevent XSS
+        safe_id = html.escape(user.id, quote=True)
+        safe_email = html.escape(account.email, quote=True)
+        safe_name = html.escape(account.display_name or account.email, quote=True)
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html><head><title>Connected!</title>
         <script>
-            localStorage.setItem('autominds_user_id', '{user.id}');
-            localStorage.setItem('autominds_email', '{account.email}');
-            localStorage.setItem('autominds_name', '{account.display_name or account.email}');
+            localStorage.setItem('autominds_user_id', {_json.dumps(safe_id)});
+            localStorage.setItem('autominds_email', {_json.dumps(safe_email)});
+            localStorage.setItem('autominds_name', {_json.dumps(safe_name)});
             window.location.href = '/dashboard';
         </script>
         </head><body style="background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;text-align:center;padding-top:100px;">
@@ -353,7 +373,9 @@ async def auth_logout(request: Request):
 # ══════════════════════════════════════════════════════════
 
 @app.get("/emails")
+@limiter.limit(f"{settings.rate_limit_per_minute}/minute")
 async def get_emails(
+    request: Request,
     user_id: str,
     max_results: int = Query(default=20, le=50),
     unread_only: bool = True,
@@ -435,7 +457,9 @@ async def get_email(user_id: str, email_id: str):
 # ══════════════════════════════════════════════════════════
 
 @app.get("/briefing")
+@limiter.limit("10/minute")
 async def get_briefing(
+    request: Request,
     user_id: str,
     max_emails: int = Query(default=25, le=50),
     force_new: bool = False,
@@ -502,7 +526,8 @@ async def get_briefing(
 # ══════════════════════════════════════════════════════════
 
 @app.post("/drafts")
-async def create_draft(user_id: str, request: DraftRequest):
+@limiter.limit("10/minute")
+async def create_draft(request: Request, user_id: str, draft_req: DraftRequest):
     """Generate an AI draft reply to an email.
     
     The draft is NOT sent automatically — user must approve it first.
@@ -516,9 +541,9 @@ async def create_draft(user_id: str, request: DraftRequest):
     source_account = None
     for account in user.connected_accounts:
         if account.provider == EmailProvider.GMAIL:
-            original = gmail_provider.fetch_email_by_id(account, request.email_id)
+            original = gmail_provider.fetch_email_by_id(account, draft_req.email_id)
         elif account.provider == EmailProvider.OUTLOOK:
-            original = outlook_provider.fetch_email_by_id(account, request.email_id)
+            original = outlook_provider.fetch_email_by_id(account, draft_req.email_id)
 
         if original:
             source_account = account
@@ -530,8 +555,8 @@ async def create_draft(user_id: str, request: DraftRequest):
     # Generate draft
     draft = email_brain.draft_reply(
         original_email=original,
-        instructions=request.instructions,
-        tone=request.tone,
+        instructions=draft_req.instructions,
+        tone=draft_req.tone,
         user_name=user.name,
     )
 
@@ -641,7 +666,8 @@ async def reject_draft(user_id: str, draft_id: str):
 # ══════════════════════════════════════════════════════════
 
 @app.post("/send")
-async def send_email_route(user_id: str, request: SendRequest):
+@limiter.limit("10/minute")
+async def send_email_route(request: Request, user_id: str, send_req: SendRequest):
     """Send a new email (not a reply)."""
     user = user_store.get_user(user_id)
     if not user:
@@ -657,19 +683,19 @@ async def send_email_route(user_id: str, request: SendRequest):
 
     if account.provider == EmailProvider.GMAIL:
         success = gmail_provider.send_email(
-            account, request.to, request.subject, request.body,
-            reply_to_id=request.reply_to_id,
+            account, send_req.to, send_req.subject, send_req.body,
+            reply_to_id=send_req.reply_to_id,
         )
     elif account.provider == EmailProvider.OUTLOOK:
         success = outlook_provider.send_email(
-            account, request.to, request.subject, request.body,
-            reply_to_id=request.reply_to_id,
+            account, send_req.to, send_req.subject, send_req.body,
+            reply_to_id=send_req.reply_to_id,
         )
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported provider: {account.provider}")
 
     if success:
-        return {"status": "sent", "to": request.to, "subject": request.subject}
+        return {"status": "sent", "to": send_req.to, "subject": send_req.subject}
     else:
         raise HTTPException(status_code=500, detail="Failed to send email")
 
@@ -784,10 +810,27 @@ async def update_auto_send(user_id: str, rule: AutoSendRuleRequest):
 
 
 # ══════════════════════════════════════════════════════════
-# ADMIN / DEBUG ROUTES
+# ADMIN / DEBUG ROUTES (API key protected)
 # ══════════════════════════════════════════════════════════
 
-@app.get("/admin/users")
+from fastapi.security import APIKeyHeader
+
+_admin_api_key_header = APIKeyHeader(name="X-Admin-Key", auto_error=False)
+
+
+async def _require_admin_key(api_key: str = Depends(_admin_api_key_header)):
+    """Dependency that validates the admin API key on protected routes."""
+    if not settings.admin_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin routes disabled — set ADMIN_API_KEY env var on server",
+        )
+    if api_key != settings.admin_api_key:
+        raise HTTPException(status_code=403, detail="Invalid admin API key")
+    return True
+
+
+@app.get("/admin/users", dependencies=[Depends(_require_admin_key)])
 async def admin_list_users():
     """List all users (admin endpoint)."""
     users = user_store.list_all_users()
@@ -807,7 +850,7 @@ async def admin_list_users():
     }
 
 
-@app.get("/admin/scheduler")
+@app.get("/admin/scheduler", dependencies=[Depends(_require_admin_key)])
 async def admin_scheduler_status():
     """Check scheduler status and list scheduled jobs."""
     return {
@@ -960,7 +1003,8 @@ async def agent_status():
 
 
 @app.post("/agent/run-now")
-async def agent_run_now(user_id: str | None = None):
+@limiter.limit("5/minute")
+async def agent_run_now(request: Request, user_id: str | None = None):
     """Trigger an immediate agent cycle — runs for one user or all users."""
     if user_id:
         user = user_store.get_user(user_id)
