@@ -76,8 +76,8 @@ class Settings(BaseSettings):
     # Sonnet 4 for analysis, briefing, draft replies
     claude_model: str = "claude-sonnet-4-20250514"
     claude_max_tokens: int = 2048
-    # Haiku 3.5 for simple/cheap tasks (spam detection, read-receipts, labeling)
-    claude_fast_model: str = "claude-3-5-haiku-20241022"
+    # Haiku 4.5 for simple/cheap tasks (spam detection, read-receipts, labeling)
+    claude_fast_model: str = "claude-haiku-4-5-20251001"
     claude_fast_max_tokens: int = 512
 
     # --- Costs ---
