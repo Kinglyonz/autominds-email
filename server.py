@@ -58,7 +58,12 @@ async def lifespan(app: FastAPI):
         logger.info(f"Autonomous agent enabled (every {settings.agent_interval_minutes} min)")
 
     # Re-schedule briefings for all existing users
-    for user in user_store.list_all_users():
+    try:
+        all_users = user_store.list_all_users()
+    except Exception as e:
+        logger.warning(f"Could not load users on startup (Supabase may be down): {e}")
+        all_users = []
+    for user in all_users:
         if user.connected_accounts:
             try:
                 parts = user.settings.briefing_time.split(":")
@@ -155,9 +160,12 @@ import draft_store
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    """Health check endpoint."""
-    all_users = user_store.list_all_users()
-    total_accounts = sum(len(u.connected_accounts) for u in all_users)
+    """Health check endpoint — lightweight, no external calls."""
+    try:
+        all_users = user_store.list_all_users()
+        total_accounts = sum(len(u.connected_accounts) for u in all_users)
+    except Exception:
+        total_accounts = -1  # Supabase may be down
     return HealthResponse(
         status="ok",
         version="1.0.0",
