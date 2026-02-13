@@ -1018,6 +1018,348 @@ async def agent_run_now(request: Request, user_id: str | None = None):
 
 
 # ══════════════════════════════════════════════════════════
+# ACTIVITY FEED — What the agent did (audit trail)
+# ══════════════════════════════════════════════════════════
+
+@app.get("/activity")
+async def get_activity(user_id: str, limit: int = Query(default=50, le=200)):
+    """
+    Get the agent activity feed for a user — recent actions, drafts, tasks created.
+    Reads from the agent_logs table (Supabase) or disk fallback.
+    """
+    import os
+    activities = []
+
+    # Try Supabase first
+    sb = autonomous_agent._get_supabase()
+    if sb:
+        try:
+            resp = sb.table("agent_logs") \
+                .select("*") \
+                .eq("user_id", user_id) \
+                .order("created_at", desc=True) \
+                .limit(limit) \
+                .execute()
+            for row in (resp.data or []):
+                activities.append({
+                    "id": row.get("id"),
+                    "type": row.get("log_type", "user_cycle"),
+                    "timestamp": row.get("cycle_start") or row.get("created_at"),
+                    "ended": row.get("cycle_end"),
+                    "elapsed_seconds": row.get("elapsed_seconds"),
+                    "emails_processed": row.get("emails_processed", 0),
+                    "summary": row.get("summary", ""),
+                    "actions": row.get("actions", []),
+                    "errors": row.get("errors", []),
+                })
+            return {"activities": activities, "total": len(activities)}
+        except Exception as exc:
+            logger.warning(f"Supabase activity read failed: {exc}")
+
+    # Fallback: read from disk
+    log_dir = autonomous_agent.AGENT_LOG_DIR
+    if os.path.exists(log_dir):
+        try:
+            files = sorted(
+                [f for f in os.listdir(log_dir) if f.startswith(user_id)],
+                reverse=True,
+            )[:limit]
+            for fname in files:
+                filepath = os.path.join(log_dir, fname)
+                with open(filepath, "r") as f:
+                    data = _json.load(f)
+                    activities.append({
+                        "id": fname,
+                        "type": data.get("log_type", "user_cycle"),
+                        "timestamp": data.get("cycle_start"),
+                        "ended": data.get("cycle_end"),
+                        "elapsed_seconds": data.get("elapsed_seconds"),
+                        "emails_processed": data.get("emails_processed", 0),
+                        "summary": data.get("summary", ""),
+                        "actions": data.get("actions", []),
+                        "errors": data.get("errors", []),
+                    })
+        except Exception as exc:
+            logger.warning(f"Disk activity read failed: {exc}")
+
+    return {"activities": activities, "total": len(activities)}
+
+
+# ══════════════════════════════════════════════════════════
+# EMAIL RULES / TRIGGERS — User-defined automations
+# ══════════════════════════════════════════════════════════
+
+class RuleCreate(BaseModel):
+    name: str
+    trigger_type: str  # "sender", "subject", "category", "priority", "keyword"
+    conditions: dict   # e.g. {"sender_contains": "boss@company.com"} or {"priority": "urgent"}
+    action_type: str   # "auto_draft", "label", "forward", "create_task", "notify", "mark_read"
+    action_config: dict = {}  # e.g. {"draft_instructions": "Reply politely", "tone": "professional"}
+    enabled: bool = True
+
+
+# In-memory rules store (with Supabase persistence when available)
+_rules_cache: dict[str, list[dict]] = {}
+
+
+def _load_rules(user_id: str) -> list[dict]:
+    """Load rules from Supabase or memory cache."""
+    if user_id in _rules_cache:
+        return _rules_cache[user_id]
+
+    sb = autonomous_agent._get_supabase()
+    if sb:
+        try:
+            resp = sb.table("email_rules") \
+                .select("*") \
+                .eq("user_id", user_id) \
+                .eq("enabled", True) \
+                .order("created_at") \
+                .execute()
+            _rules_cache[user_id] = resp.data or []
+            return _rules_cache[user_id]
+        except Exception:
+            pass
+
+    _rules_cache.setdefault(user_id, [])
+    return _rules_cache[user_id]
+
+
+@app.get("/user/rules")
+async def list_rules(user_id: str):
+    """List all email rules/triggers for a user."""
+    return {"rules": _load_rules(user_id)}
+
+
+@app.post("/user/rules")
+async def create_rule(user_id: str, rule: RuleCreate):
+    """Create a new email automation rule."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rule_id = str(uuid.uuid4())[:8]
+    rule_data = {
+        "id": rule_id,
+        "user_id": user_id,
+        "name": rule.name,
+        "trigger_type": rule.trigger_type,
+        "conditions": rule.conditions,
+        "action_type": rule.action_type,
+        "action_config": rule.action_config,
+        "enabled": rule.enabled,
+        "created_at": datetime.utcnow().isoformat(),
+        "times_triggered": 0,
+    }
+
+    # Persist to Supabase if available
+    sb = autonomous_agent._get_supabase()
+    if sb:
+        try:
+            sb.table("email_rules").insert(rule_data).execute()
+        except Exception as exc:
+            logger.warning(f"Failed to save rule to Supabase: {exc}")
+
+    # Always cache in memory
+    _rules_cache.setdefault(user_id, []).append(rule_data)
+
+    return {"rule": rule_data}
+
+
+@app.delete("/user/rules/{rule_id}")
+async def delete_rule(rule_id: str, user_id: str):
+    """Delete an email automation rule."""
+    sb = autonomous_agent._get_supabase()
+    if sb:
+        try:
+            sb.table("email_rules").delete().eq("id", rule_id).eq("user_id", user_id).execute()
+        except Exception as exc:
+            logger.warning(f"Failed to delete rule from Supabase: {exc}")
+
+    # Remove from cache
+    if user_id in _rules_cache:
+        _rules_cache[user_id] = [r for r in _rules_cache[user_id] if r.get("id") != rule_id]
+
+    return {"deleted": rule_id}
+
+
+@app.put("/user/rules/{rule_id}/toggle")
+async def toggle_rule(rule_id: str, user_id: str, enabled: bool = True):
+    """Enable or disable an email rule."""
+    sb = autonomous_agent._get_supabase()
+    if sb:
+        try:
+            sb.table("email_rules").update({"enabled": enabled}).eq("id", rule_id).eq("user_id", user_id).execute()
+        except Exception as exc:
+            logger.warning(f"Failed to toggle rule: {exc}")
+
+    if user_id in _rules_cache:
+        for r in _rules_cache[user_id]:
+            if r.get("id") == rule_id:
+                r["enabled"] = enabled
+                break
+
+    return {"rule_id": rule_id, "enabled": enabled}
+
+
+# ══════════════════════════════════════════════════════════
+# RECURRING AUTOMATIONS — Weekly/monthly digests
+# ══════════════════════════════════════════════════════════
+
+class AutomationCreate(BaseModel):
+    name: str
+    schedule_type: str  # "weekly", "monthly", "daily"
+    day_of_week: int = 1  # 0=Mon, 6=Sun (for weekly)
+    day_of_month: int = 1  # 1-28 (for monthly)
+    hour: int = 9
+    minute: int = 0
+    timezone: str = "America/New_York"
+    action: str  # "weekly_digest", "monthly_report", "follow_up_check", "inbox_cleanup"
+    enabled: bool = True
+
+
+_automations_cache: dict[str, list[dict]] = {}
+
+
+@app.get("/user/automations")
+async def list_automations(user_id: str):
+    """List all recurring automations for a user."""
+    automations = _automations_cache.get(user_id, [])
+
+    # Try Supabase
+    sb = autonomous_agent._get_supabase()
+    if sb and not automations:
+        try:
+            resp = sb.table("automations") \
+                .select("*") \
+                .eq("user_id", user_id) \
+                .order("created_at") \
+                .execute()
+            automations = resp.data or []
+            _automations_cache[user_id] = automations
+        except Exception:
+            pass
+
+    return {"automations": automations}
+
+
+@app.post("/user/automations")
+async def create_automation(user_id: str, automation: AutomationCreate):
+    """Create a new recurring automation (weekly digest, monthly report, etc.)."""
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    auto_id = str(uuid.uuid4())[:8]
+    auto_data = {
+        "id": auto_id,
+        "user_id": user_id,
+        "name": automation.name,
+        "schedule_type": automation.schedule_type,
+        "day_of_week": automation.day_of_week,
+        "day_of_month": automation.day_of_month,
+        "hour": automation.hour,
+        "minute": automation.minute,
+        "timezone": automation.timezone,
+        "action": automation.action,
+        "enabled": automation.enabled,
+        "created_at": datetime.utcnow().isoformat(),
+        "last_run": None,
+        "run_count": 0,
+    }
+
+    # Persist to Supabase
+    sb = autonomous_agent._get_supabase()
+    if sb:
+        try:
+            sb.table("automations").insert(auto_data).execute()
+        except Exception as exc:
+            logger.warning(f"Failed to save automation to Supabase: {exc}")
+
+    _automations_cache.setdefault(user_id, []).append(auto_data)
+
+    # Schedule the job with APScheduler
+    _schedule_automation(user_id, auto_data)
+
+    return {"automation": auto_data}
+
+
+@app.delete("/user/automations/{auto_id}")
+async def delete_automation(auto_id: str, user_id: str):
+    """Delete a recurring automation."""
+    # Remove from scheduler
+    try:
+        sched = scheduler.get_scheduler()
+        sched.remove_job(f"automation_{auto_id}")
+    except Exception:
+        pass
+
+    # Remove from Supabase
+    sb = autonomous_agent._get_supabase()
+    if sb:
+        try:
+            sb.table("automations").delete().eq("id", auto_id).eq("user_id", user_id).execute()
+        except Exception:
+            pass
+
+    if user_id in _automations_cache:
+        _automations_cache[user_id] = [a for a in _automations_cache[user_id] if a.get("id") != auto_id]
+
+    return {"deleted": auto_id}
+
+
+def _schedule_automation(user_id: str, auto: dict):
+    """Register a recurring automation job on APScheduler."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    sched = scheduler.get_scheduler()
+    trigger_kwargs = {
+        "hour": auto.get("hour", 9),
+        "minute": auto.get("minute", 0),
+        "timezone": auto.get("timezone", "America/New_York"),
+    }
+
+    schedule_type = auto.get("schedule_type", "weekly")
+    if schedule_type == "weekly":
+        trigger_kwargs["day_of_week"] = str(auto.get("day_of_week", 0))
+    elif schedule_type == "monthly":
+        trigger_kwargs["day"] = str(auto.get("day_of_month", 1))
+    # daily = no additional constraints
+
+    async def _run_automation():
+        """Execute a scheduled automation."""
+        logger.info(f"[automation] Running '{auto.get('name')}' for user {user_id}")
+        action = auto.get("action", "weekly_digest")
+
+        if action in ("weekly_digest", "monthly_report"):
+            # Generate a briefing with larger scope
+            try:
+                result = await email_brain.generate_briefing(
+                    user_id=user_id,
+                    max_emails=100 if action == "monthly_report" else 50,
+                    force_new=True,
+                )
+                logger.info(f"[automation] '{auto.get('name')}' completed: {result.get('total_unread', 0)} emails analyzed")
+            except Exception as exc:
+                logger.error(f"[automation] Failed: {exc}")
+        elif action == "follow_up_check":
+            # Run the agent to check for follow-ups needed
+            await autonomous_agent.run_agent_for_user(user_id)
+        elif action == "inbox_cleanup":
+            await autonomous_agent.run_agent_for_user(user_id)
+
+    sched.add_job(
+        _run_automation,
+        trigger=CronTrigger(**trigger_kwargs),
+        id=f"automation_{auto.get('id')}",
+        name=auto.get("name", "Custom Automation"),
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info(f"[automation] Scheduled '{auto.get('name')}' ({schedule_type}) for user {user_id}")
+
+
+# ══════════════════════════════════════════════════════════
 # HELPER — Get Gmail account from user
 # ══════════════════════════════════════════════════════════
 

@@ -63,7 +63,13 @@ const panelMeta = {
     inbox: { title: 'Inbox Pilot', sub: 'Automated email intelligence and briefings.', iconBg: 'rgba(34,197,94,0.08)',
         svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>' },
     echo: { title: 'Echo', sub: 'Your digital clone. Coming soon.', iconBg: 'rgba(168,85,247,0.08)',
-        svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2"><path d="M12 3a9 9 0 019 9 9 9 0 01-9 9"/><path d="M12 7a5 5 0 015 5 5 5 0 01-5 5"/><circle cx="12" cy="12" r="1"/></svg>' }
+        svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2"><path d="M12 3a9 9 0 019 9 9 9 0 01-9 9"/><path d="M12 7a5 5 0 015 5 5 5 0 01-5 5"/><circle cx="12" cy="12" r="1"/></svg>' },
+    activity: { title: 'Activity Feed', sub: 'Everything your AI agent did — transparent and auditable.', iconBg: 'rgba(245,158,11,0.08)',
+        svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' },
+    rules: { title: 'Email Rules', sub: 'If this happens, then do that — automatically.', iconBg: 'rgba(239,68,68,0.08)',
+        svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
+    automations: { title: 'Schedules', sub: 'Recurring automations — weekly digests, monthly reports, cleanup.', iconBg: 'rgba(20,184,166,0.08)',
+        svg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14B8A6" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' }
 };
 
 function switchPanel(panel) {
@@ -81,6 +87,9 @@ function switchPanel(panel) {
         loadEmails();
         inboxLoaded = true;
     }
+    if (panel === 'activity') loadActivity();
+    if (panel === 'rules') loadRules();
+    if (panel === 'automations') loadAutomations();
 }
 
 function logout() {
@@ -535,4 +544,302 @@ function clearFilter() {
     document.querySelectorAll('.email-row').forEach(row => row.style.display = '');
     const badge = document.getElementById('filter-badge');
     if (badge) badge.style.display = 'none';
+}
+
+// ── Activity Feed ──
+async function loadActivity() {
+    const feed = document.getElementById('activity-feed');
+    if (!feed) return;
+    feed.innerHTML = '<div class="activity-loading"><div class="spinner-sm"></div> Loading activity...</div>';
+    try {
+        const res = await fetch(`${API_BASE}/activity?user_id=${userId}&limit=50`);
+        if (!res.ok) throw new Error('Failed to load activity');
+        const data = await res.json();
+        const logs = data.logs || [];
+        if (logs.length === 0) {
+            feed.innerHTML = '<div class="activity-empty"><p>No activity yet. Your AI agent actions will appear here.</p></div>';
+            return;
+        }
+        feed.innerHTML = '';
+        logs.forEach(log => {
+            const actions = log.actions_taken || {};
+            const items = actions.actions || [];
+            const card = document.createElement('div');
+            card.className = 'activity-card';
+            const time = log.timestamp ? new Date(log.timestamp).toLocaleString() : '';
+            const subject = actions.subject || 'Unknown email';
+            const from = actions.from_name || actions.from || '';
+            const priority = actions.priority || 'normal';
+            const priBadge = `<span class="pri-badge pri-${priority}">${priority}</span>`;
+            const actionTags = items.map(a => {
+                const icons = { labeled: '🏷️', task_created: '✅', draft_created: '📝' };
+                return `<span class="action-tag">${icons[a.type] || '⚡'} ${a.type.replace('_', ' ')}${a.label ? ': ' + a.label : ''}</span>`;
+            }).join('');
+            card.innerHTML = `
+                <div class="activity-time">${time}</div>
+                <div class="activity-subject">${subject} ${priBadge}</div>
+                <div class="activity-from">From: ${from}</div>
+                <div class="activity-actions">${actionTags || '<span class="action-tag">📋 Processed</span>'}</div>
+            `;
+            feed.appendChild(card);
+        });
+    } catch (e) {
+        feed.innerHTML = `<div class="activity-empty"><p>Could not load activity: ${e.message}</p></div>`;
+    }
+}
+
+// ── Rules ──
+let rulesCache = [];
+
+function showRuleBuilder() {
+    document.getElementById('rule-builder').classList.remove('hidden');
+    document.getElementById('rule-empty')?.classList.add('hidden');
+}
+
+function hideRuleBuilder() {
+    document.getElementById('rule-builder').classList.add('hidden');
+    document.getElementById('rule-name').value = '';
+    document.getElementById('rule-trigger').value = 'email_received';
+    document.getElementById('rule-condition-input').value = '';
+    document.getElementById('rule-action').value = 'label';
+    document.getElementById('rule-action-config').value = '';
+    if (rulesCache.length === 0) document.getElementById('rule-empty')?.classList.remove('hidden');
+}
+
+function updateRuleConditions() {
+    const trigger = document.getElementById('rule-trigger').value;
+    const input = document.getElementById('rule-condition-input');
+    const placeholders = {
+        email_received: 'e.g. from:boss@company.com',
+        priority_high: 'Auto-triggered for high priority',
+        vip_sender: 'VIP senders are auto-detected',
+        keyword_match: 'e.g. invoice, payment, urgent'
+    };
+    input.placeholder = placeholders[trigger] || 'Enter condition...';
+    if (trigger === 'priority_high' || trigger === 'vip_sender') {
+        input.value = ''; input.disabled = true;
+    } else {
+        input.disabled = false;
+    }
+}
+
+function updateRuleActionConfig() {
+    const action = document.getElementById('rule-action').value;
+    const input = document.getElementById('rule-action-config');
+    const placeholders = {
+        label: 'Label name, e.g. Important',
+        draft_reply: 'Reply instructions, e.g. Thank them and confirm receipt',
+        create_task: 'Task description, e.g. Follow up by Friday',
+        forward: 'Forward to email, e.g. team@company.com',
+        archive: 'No config needed'
+    };
+    input.placeholder = placeholders[action] || 'Configuration...';
+    input.disabled = (action === 'archive');
+    if (action === 'archive') input.value = '';
+}
+
+async function saveRule() {
+    const name = document.getElementById('rule-name').value.trim();
+    const trigger = document.getElementById('rule-trigger').value;
+    const conditionRaw = document.getElementById('rule-condition-input').value.trim();
+    const action = document.getElementById('rule-action').value;
+    const actionConfig = document.getElementById('rule-action-config').value.trim();
+    if (!name) { alert('Give your rule a name.'); return; }
+    const conditions = {};
+    if (trigger === 'email_received' && conditionRaw) {
+        if (conditionRaw.startsWith('from:')) conditions.from = conditionRaw.replace('from:', '').trim();
+        else conditions.contains = conditionRaw;
+    } else if (trigger === 'keyword_match' && conditionRaw) {
+        conditions.keywords = conditionRaw.split(',').map(k => k.trim());
+    }
+    const body = {
+        name, trigger_type: trigger, conditions,
+        action_type: action,
+        action_config: actionConfig ? { value: actionConfig } : {},
+        enabled: true
+    };
+    try {
+        const res = await fetch(`${API_BASE}/user/rules?user_id=${userId}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('Failed to save rule');
+        hideRuleBuilder();
+        loadRules();
+    } catch (e) { alert('Error saving rule: ' + e.message); }
+}
+
+async function deleteRule(ruleId) {
+    if (!confirm('Delete this rule?')) return;
+    try {
+        await fetch(`${API_BASE}/user/rules/${ruleId}?user_id=${userId}`, { method: 'DELETE' });
+        loadRules();
+    } catch (e) { alert('Error deleting rule: ' + e.message); }
+}
+
+async function toggleRule(ruleId) {
+    try {
+        await fetch(`${API_BASE}/user/rules/${ruleId}/toggle?user_id=${userId}`, { method: 'PUT' });
+        loadRules();
+    } catch (e) { alert('Error toggling rule: ' + e.message); }
+}
+
+async function loadRules() {
+    const list = document.getElementById('rules-list');
+    const empty = document.getElementById('rule-empty');
+    if (!list) return;
+    list.innerHTML = '<div class="activity-loading"><div class="spinner-sm"></div> Loading rules...</div>';
+    try {
+        const res = await fetch(`${API_BASE}/user/rules?user_id=${userId}`);
+        if (!res.ok) throw new Error('Failed to load rules');
+        const data = await res.json();
+        rulesCache = data.rules || [];
+        if (rulesCache.length === 0) {
+            list.innerHTML = '';
+            if (empty) empty.classList.remove('hidden');
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+        list.innerHTML = '';
+        rulesCache.forEach(rule => {
+            const card = document.createElement('div');
+            card.className = 'rule-card';
+            const statusClass = rule.enabled ? 'rule-active' : 'rule-disabled';
+            const statusText = rule.enabled ? 'Active' : 'Paused';
+            card.innerHTML = `
+                <div class="rule-card-header">
+                    <span class="rule-card-name">${rule.name}</span>
+                    <span class="rule-status ${statusClass}">${statusText}</span>
+                </div>
+                <div class="rule-card-detail">
+                    <span class="rule-trigger-badge">${rule.trigger_type.replace('_', ' ')}</span>
+                    → <span class="rule-action-badge">${rule.action_type.replace('_', ' ')}</span>
+                </div>
+                <div class="rule-card-meta">Triggered ${rule.times_triggered || 0} times</div>
+                <div class="rule-card-actions">
+                    <button onclick="toggleRule('${rule.id}')" class="btn-sm">${rule.enabled ? '⏸ Pause' : '▶ Enable'}</button>
+                    <button onclick="deleteRule('${rule.id}')" class="btn-sm btn-danger">🗑 Delete</button>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    } catch (e) {
+        list.innerHTML = `<div class="activity-empty"><p>Could not load rules: ${e.message}</p></div>`;
+    }
+}
+
+// ── Automations / Schedules ──
+let automationsCache = [];
+
+function showAutoBuilder() {
+    document.getElementById('auto-builder').classList.remove('hidden');
+    document.getElementById('auto-empty')?.classList.add('hidden');
+}
+
+function hideAutoBuilder() {
+    document.getElementById('auto-builder').classList.add('hidden');
+    document.getElementById('auto-name').value = '';
+    document.getElementById('auto-schedule').value = 'weekly';
+    document.getElementById('auto-day').value = '1';
+    document.getElementById('auto-hour').value = '9';
+    document.getElementById('auto-minute').value = '0';
+    document.getElementById('auto-action').value = 'weekly_digest';
+    if (automationsCache.length === 0) document.getElementById('auto-empty')?.classList.remove('hidden');
+}
+
+async function saveAutomation() {
+    const name = document.getElementById('auto-name').value.trim();
+    const schedule = document.getElementById('auto-schedule').value;
+    const day = parseInt(document.getElementById('auto-day').value);
+    const hour = parseInt(document.getElementById('auto-hour').value);
+    const minute = parseInt(document.getElementById('auto-minute').value);
+    const action = document.getElementById('auto-action').value;
+    if (!name) { alert('Give your automation a name.'); return; }
+    const body = {
+        name, schedule_type: schedule, action, hour, minute, enabled: true,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    };
+    if (schedule === 'weekly') body.day_of_week = day;
+    if (schedule === 'monthly') body.day_of_month = day;
+    try {
+        const res = await fetch(`${API_BASE}/user/automations?user_id=${userId}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('Failed to save automation');
+        hideAutoBuilder();
+        loadAutomations();
+    } catch (e) { alert('Error saving automation: ' + e.message); }
+}
+
+async function deleteAutomation(autoId) {
+    if (!confirm('Delete this automation?')) return;
+    try {
+        await fetch(`${API_BASE}/user/automations/${autoId}?user_id=${userId}`, { method: 'DELETE' });
+        loadAutomations();
+    } catch (e) { alert('Error deleting automation: ' + e.message); }
+}
+
+function quickSchedule(type) {
+    const presets = {
+        weekly_digest: { name: 'Weekly Digest', schedule: 'weekly', day: 1, hour: 9, minute: 0, action: 'weekly_digest' },
+        monthly_report: { name: 'Monthly Report', schedule: 'monthly', day: 1, hour: 9, minute: 0, action: 'monthly_report' },
+        followup_alerts: { name: 'Follow-Up Alerts', schedule: 'daily', day: 0, hour: 10, minute: 0, action: 'followup_check' },
+        weekend_cleanup: { name: 'Weekend Cleanup', schedule: 'weekly', day: 6, hour: 18, minute: 0, action: 'cleanup' }
+    };
+    const p = presets[type];
+    if (!p) return;
+    document.getElementById('auto-name').value = p.name;
+    document.getElementById('auto-schedule').value = p.schedule;
+    document.getElementById('auto-day').value = p.day;
+    document.getElementById('auto-hour').value = p.hour;
+    document.getElementById('auto-minute').value = p.minute;
+    document.getElementById('auto-action').value = p.action;
+    showAutoBuilder();
+}
+
+async function loadAutomations() {
+    const list = document.getElementById('automations-list');
+    const empty = document.getElementById('auto-empty');
+    if (!list) return;
+    list.innerHTML = '<div class="activity-loading"><div class="spinner-sm"></div> Loading automations...</div>';
+    try {
+        const res = await fetch(`${API_BASE}/user/automations?user_id=${userId}`);
+        if (!res.ok) throw new Error('Failed to load automations');
+        const data = await res.json();
+        automationsCache = data.automations || [];
+        if (automationsCache.length === 0) {
+            list.innerHTML = '';
+            if (empty) empty.classList.remove('hidden');
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+        list.innerHTML = '';
+        automationsCache.forEach(auto => {
+            const card = document.createElement('div');
+            card.className = 'auto-card';
+            const schedDesc = auto.schedule_type === 'daily' ? 'Every day'
+                : auto.schedule_type === 'weekly' ? `Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][auto.day_of_week || 0]}`
+                : `Day ${auto.day_of_month || 1} of month`;
+            const timeStr = `${String(auto.hour || 0).padStart(2,'0')}:${String(auto.minute || 0).padStart(2,'0')}`;
+            const lastRun = auto.last_run ? new Date(auto.last_run).toLocaleString() : 'Never';
+            card.innerHTML = `
+                <div class="auto-card-header">
+                    <span class="auto-card-name">${auto.name}</span>
+                    <span class="rule-status ${auto.enabled ? 'rule-active' : 'rule-disabled'}">${auto.enabled ? 'Active' : 'Paused'}</span>
+                </div>
+                <div class="auto-card-detail">
+                    <span class="auto-sched-badge">${schedDesc} at ${timeStr}</span>
+                    → <span class="rule-action-badge">${auto.action.replace('_', ' ')}</span>
+                </div>
+                <div class="auto-card-meta">Runs: ${auto.run_count || 0} · Last: ${lastRun}</div>
+                <div class="rule-card-actions">
+                    <button onclick="deleteAutomation('${auto.id}')" class="btn-sm btn-danger">🗑 Delete</button>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    } catch (e) {
+        list.innerHTML = `<div class="activity-empty"><p>Could not load automations: ${e.message}</p></div>`;
+    }
 }

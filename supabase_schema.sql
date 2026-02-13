@@ -106,6 +106,48 @@ CREATE TABLE IF NOT EXISTS briefings (
 CREATE INDEX IF NOT EXISTS idx_briefings_user_date ON briefings(user_id, briefing_date DESC);
 
 -- ═══════════════════════════════════════════════════════════
+-- EMAIL RULES (user-defined automation triggers)
+-- ═══════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS email_rules (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    trigger_type TEXT NOT NULL,      -- 'sender', 'subject', 'category', 'priority', 'keyword'
+    conditions JSONB DEFAULT '{}',   -- {"sender_contains": "boss@x.com"} or {"priority": "urgent"}
+    action_type TEXT NOT NULL,       -- 'auto_draft', 'label', 'forward', 'create_task', 'notify', 'mark_read'
+    action_config JSONB DEFAULT '{}', -- {"draft_instructions": "...", "tone": "professional"}
+    enabled BOOLEAN DEFAULT true,
+    times_triggered INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_rules_user_id ON email_rules(user_id);
+
+-- ═══════════════════════════════════════════════════════════
+-- AUTOMATIONS (recurring scheduled tasks)
+-- ═══════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS automations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    schedule_type TEXT NOT NULL,     -- 'daily', 'weekly', 'monthly'
+    day_of_week INT DEFAULT 1,      -- 0=Mon..6=Sun
+    day_of_month INT DEFAULT 1,     -- 1-28
+    hour INT DEFAULT 9,
+    minute INT DEFAULT 0,
+    timezone TEXT DEFAULT 'America/New_York',
+    action TEXT NOT NULL,            -- 'weekly_digest', 'monthly_report', 'follow_up_check', 'inbox_cleanup'
+    enabled BOOLEAN DEFAULT true,
+    last_run TIMESTAMPTZ,
+    run_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_automations_user_id ON automations(user_id);
+
+-- ═══════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY (disabled for service key access)
 -- Enable these later when you add user-facing auth
 -- ═══════════════════════════════════════════════════════════
@@ -116,6 +158,8 @@ ALTER TABLE drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE briefings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE automations ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role full access (your backend uses service key)
 CREATE POLICY "Service role full access" ON users FOR ALL USING (true) WITH CHECK (true);
@@ -124,3 +168,5 @@ CREATE POLICY "Service role full access" ON drafts FOR ALL USING (true) WITH CHE
 CREATE POLICY "Service role full access" ON agent_state FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON agent_logs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON briefings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access" ON email_rules FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access" ON automations FOR ALL USING (true) WITH CHECK (true);
