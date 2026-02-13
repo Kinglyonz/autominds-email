@@ -23,12 +23,12 @@
 
     <div class="nav-label">Your AMIs</div>
     <nav id="ami-nav">
-        <div class="nav-item active" data-panel="cortex" onclick="switchPanel('cortex')">
+        <div class="nav-item" data-panel="cortex" onclick="switchPanel('cortex')">
             <div class="nav-icon cortex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
             <div><div class="nav-name">Cortex</div><div class="nav-sub">Knowledge Engine</div></div>
             <span class="badge badge-live">Live</span>
         </div>
-        <div class="nav-item" data-panel="inbox" onclick="switchPanel('inbox')">
+        <div class="nav-item active" data-panel="inbox" onclick="switchPanel('inbox')">
             <div class="nav-icon inbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg></div>
             <div><div class="nav-name">Inbox Pilot</div><div class="nav-sub">Email Intelligence</div></div>
             <span class="badge badge-live">Live</span>
@@ -57,17 +57,17 @@
     <!-- Top Bar -->
     <header class="topbar">
         <div class="topbar-left">
-            <div class="topbar-icon" id="topbar-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+            <div class="topbar-icon" id="topbar-icon" style="background:rgba(34,197,94,0.08)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg></div>
             <div>
-                <h1 class="topbar-title" id="topbar-title">Cortex</h1>
-                <p class="topbar-sub" id="topbar-sub">Chat with your documents. Powered by RAG.</p>
+                <h1 class="topbar-title" id="topbar-title">Inbox Pilot</h1>
+                <p class="topbar-sub" id="topbar-sub">Automated email intelligence and briefings.</p>
             </div>
         </div>
         <div class="status-pill"><span class="pulse-dot"></span>Online</div>
     </header>
 
     <!-- Panel: Cortex -->
-    <div id="panel-cortex" class="panel">
+    <div id="panel-cortex" class="panel hidden">
         <div class="index-bar">
             <input id="folder-id-input" type="text" placeholder="Paste Google Drive Folder ID to index..." class="input-field">
             <button onclick="indexDocuments()" id="index-btn" class="btn-glow">Index</button>
@@ -88,7 +88,51 @@
     </div>
 
     <!-- Panel: Inbox Pilot -->
-    <div id="panel-inbox" class="panel hidden">
+    <div id="panel-inbox" class="panel">
+        <!-- Quick Actions Bar -->
+        <div class="quick-actions" id="quick-actions">
+            <div class="qa-header">
+                <span class="qa-wave">👋</span>
+                <div>
+                    <div class="qa-title">Welcome! Here's what I can do</div>
+                    <div class="qa-sub">Click any action to get started instantly</div>
+                </div>
+                <button class="qa-dismiss" onclick="dismissQuickActions()" title="Dismiss">✕</button>
+            </div>
+            <div class="qa-grid">
+                <button class="qa-card" onclick="quickAction('summarize')">
+                    <div class="qa-icon qa-icon-blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+                    <div class="qa-label">Summarize My Inbox</div>
+                    <div class="qa-desc">Get an AI-powered briefing of everything in your inbox</div>
+                </button>
+                <button class="qa-card" onclick="quickAction('urgent')">
+                    <div class="qa-icon qa-icon-red"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                    <div class="qa-label">Show Urgent Emails</div>
+                    <div class="qa-desc">See only the emails that need immediate attention</div>
+                </button>
+                <button class="qa-card" onclick="quickAction('drafts')">
+                    <div class="qa-icon qa-icon-green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div>
+                    <div class="qa-label">Draft AI Replies</div>
+                    <div class="qa-desc">Let AI write professional replies to your emails</div>
+                </button>
+                <button class="qa-card" onclick="quickAction('agent')">
+                    <div class="qa-icon qa-icon-purple"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9-11h2m18 0h2m-3.64-6.36l-1.42 1.42M6.34 17.66l-1.42 1.42m0-12.73l1.42 1.42m11.31 11.31l1.42 1.42"/></svg></div>
+                    <div class="qa-label">Run AI Agent</div>
+                    <div class="qa-desc">Auto-scan inbox, draft replies, and create tasks</div>
+                </button>
+                <button class="qa-card" onclick="quickAction('unread')">
+                    <div class="qa-icon qa-icon-amber"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg></div>
+                    <div class="qa-label">Check Unread</div>
+                    <div class="qa-desc">Load your latest unread emails with AI analysis</div>
+                </button>
+                <button class="qa-card" onclick="quickAction('weekly')">
+                    <div class="qa-icon qa-icon-teal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+                    <div class="qa-label">This Week's Summary</div>
+                    <div class="qa-desc">Highlights and key emails from the past 7 days</div>
+                </button>
+            </div>
+        </div>
+
         <!-- Inbox sub-tabs -->
         <div class="inbox-tabs">
             <button class="inbox-tab active" data-tab="emails" onclick="switchInboxTab('emails')">

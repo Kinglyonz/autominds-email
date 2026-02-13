@@ -1,7 +1,7 @@
 /* ── AutoMinds Command Center — Logic + Particle Background ── */
 const API_BASE = window.location.origin;
 let userId = null;
-let activePanel = 'cortex';
+let activePanel = 'inbox';
 let inboxLoaded = false;
 let cachedEmails = [];
 
@@ -439,6 +439,22 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('user-display-name').textContent = displayName;
             document.getElementById('user-display-email').textContent = data.email || '';
             document.getElementById('user-avatar').textContent = (displayName.charAt(0) || '?').toUpperCase();
+            // Personalize quick actions greeting
+            const qaTitle = document.querySelector('.qa-title');
+            if (qaTitle) {
+                const firstName = displayName.split(' ')[0];
+                qaTitle.textContent = `Hey ${firstName}! Here's what I can do`;
+            }
+            // Check if quick actions were dismissed
+            if (localStorage.getItem('autominds_qa_dismissed')) {
+                const qa = document.getElementById('quick-actions');
+                if (qa) qa.style.display = 'none';
+            }
+            // Auto-load inbox since it's the default panel
+            if (!inboxLoaded) {
+                loadEmails();
+                inboxLoaded = true;
+            }
             return fetch(`${API_BASE}/ami/knowledge/status/${userId}`);
         })
         .then(r => r ? r.json() : null)
@@ -449,3 +465,74 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }).catch(() => {});
 });
+
+// ══════════════════════════════════════════════════════════════
+// QUICK ACTIONS
+// ══════════════════════════════════════════════════════════════
+function quickAction(action) {
+    switch (action) {
+        case 'summarize':
+            switchInboxTab('briefing');
+            break;
+        case 'urgent':
+            switchInboxTab('emails');
+            setTimeout(() => filterEmailsByPriority('urgent'), inboxLoaded ? 100 : 2000);
+            break;
+        case 'drafts':
+            switchInboxTab('drafts');
+            break;
+        case 'agent':
+            switchInboxTab('agent');
+            runAgentNow();
+            break;
+        case 'unread':
+            switchInboxTab('emails');
+            if (!inboxLoaded) { loadEmails(); inboxLoaded = true; }
+            else refreshInbox();
+            break;
+        case 'weekly':
+            switchInboxTab('briefing');
+            break;
+    }
+    // Collapse quick actions after use
+    const qa = document.getElementById('quick-actions');
+    if (qa) qa.classList.add('qa-collapsed');
+}
+
+function dismissQuickActions() {
+    const qa = document.getElementById('quick-actions');
+    if (qa) {
+        qa.style.display = 'none';
+        localStorage.setItem('autominds_qa_dismissed', '1');
+    }
+}
+
+function filterEmailsByPriority(priority) {
+    const rows = document.querySelectorAll('.email-row');
+    let visibleCount = 0;
+    rows.forEach(row => {
+        const priDot = row.querySelector('.email-priority');
+        if (priDot && priDot.classList.contains(priority)) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    const list = document.getElementById('email-list');
+    let badge = document.getElementById('filter-badge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'filter-badge';
+        badge.className = 'filter-badge';
+        list.parentNode.insertBefore(badge, list);
+    }
+    badge.innerHTML = `<span>Showing: <strong>${priority}</strong> emails (${visibleCount})</span><button onclick="clearFilter()" class="filter-clear">✕ Show all</button>`;
+    badge.style.display = 'flex';
+}
+
+function clearFilter() {
+    document.querySelectorAll('.email-row').forEach(row => row.style.display = '');
+    const badge = document.getElementById('filter-badge');
+    if (badge) badge.style.display = 'none';
+}

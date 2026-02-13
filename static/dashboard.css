@@ -217,6 +217,90 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 
 /* ══════════════════════════════════════════════════════════════
+   QUICK ACTIONS — Guided onboarding cards
+   ══════════════════════════════════════════════════════════════ */
+.quick-actions {
+    padding: 20px 28px 0; border-bottom: 1px solid var(--border);
+    background: rgba(10,10,10,0.4); transition: all 0.3s ease;
+    overflow: hidden; max-height: 400px;
+}
+.quick-actions.qa-collapsed { max-height: 0; padding: 0 28px; border-bottom: none; opacity: 0; pointer-events: none; }
+.qa-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+}
+.qa-wave { font-size: 24px; animation: wave 2.5s infinite; transform-origin: 70% 70%; }
+@keyframes wave {
+    0%,60%,100% { transform: rotate(0deg); }
+    10% { transform: rotate(14deg); }
+    20% { transform: rotate(-8deg); }
+    30% { transform: rotate(14deg); }
+    40% { transform: rotate(-4deg); }
+    50% { transform: rotate(10deg); }
+}
+.qa-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 16px; font-weight: 700; }
+.qa-sub { font-size: 12px; color: var(--t3); margin-top: 2px; }
+.qa-dismiss {
+    margin-left: auto; width: 28px; height: 28px; border-radius: 8px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    color: var(--t3); cursor: pointer; font-size: 12px; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+}
+.qa-dismiss:hover { color: #EF4444; border-color: rgba(239,68,68,0.2); background: rgba(239,68,68,0.06); }
+
+.qa-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    padding-bottom: 20px;
+}
+.qa-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+    padding: 16px; border-radius: 14px; border: 1px solid var(--border);
+    background: rgba(17,17,17,0.5); backdrop-filter: blur(8px);
+    cursor: pointer; transition: all 0.25s ease; text-align: left;
+    font-family: 'Inter', sans-serif; position: relative; overflow: hidden;
+}
+.qa-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    opacity: 0; transition: opacity 0.25s;
+}
+.qa-card:hover { border-color: var(--border-hi); background: rgba(255,255,255,0.03); transform: translateY(-2px); }
+.qa-card:hover::before { opacity: 1; }
+.qa-card:active { transform: translateY(0); }
+.qa-icon {
+    width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+}
+.qa-icon-blue { background: rgba(59,130,246,0.1); color: var(--blue); box-shadow: 0 0 16px rgba(59,130,246,0.08); }
+.qa-icon-red { background: rgba(239,68,68,0.1); color: #EF4444; box-shadow: 0 0 16px rgba(239,68,68,0.08); }
+.qa-icon-green { background: rgba(34,197,94,0.1); color: var(--green); box-shadow: 0 0 16px rgba(34,197,94,0.08); }
+.qa-icon-purple { background: rgba(168,85,247,0.1); color: var(--purple); box-shadow: 0 0 16px rgba(168,85,247,0.08); }
+.qa-icon-amber { background: rgba(245,158,11,0.1); color: var(--amber); box-shadow: 0 0 16px rgba(245,158,11,0.08); }
+.qa-icon-teal { background: rgba(20,184,166,0.1); color: #14B8A6; box-shadow: 0 0 16px rgba(20,184,166,0.08); }
+.qa-label { font-size: 13px; font-weight: 600; color: var(--t1); }
+.qa-desc { font-size: 11px; color: var(--t3); line-height: 1.5; }
+
+/* Filter badge */
+.filter-badge {
+    display: none; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 28px; background: rgba(239,68,68,0.04); border-bottom: 1px solid rgba(239,68,68,0.1);
+    font-size: 13px; color: var(--t2);
+}
+.filter-badge strong { color: #EF4444; text-transform: uppercase; }
+.filter-clear {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--t3); padding: 4px 12px; font-size: 12px; cursor: pointer; transition: all 0.15s;
+    font-family: 'Inter', sans-serif;
+}
+.filter-clear:hover { color: var(--t1); border-color: var(--border-hi); }
+
+@media (max-width: 1024px) {
+    .qa-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+    .qa-grid { grid-template-columns: 1fr; }
+    .quick-actions { padding: 16px 16px 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════
    INBOX PILOT — Real Email Management UI
    ══════════════════════════════════════════════════════════════ */
 
