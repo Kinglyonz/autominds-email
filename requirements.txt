@@ -39,3 +39,6 @@ python-multipart==0.0.18
 # RAG / Knowledge Worker
 scikit-learn==1.4.0
 pypdf==4.0.1
+
+# Payments
+stripe==11.4.1

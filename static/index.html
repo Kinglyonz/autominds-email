@@ -325,17 +325,18 @@
                         <div style="margin-bottom: 1rem; font-family: 'Roboto Mono'; font-size: 0.8rem; color: #60A5FA;">MOST POPULAR</div>
                         <h3>Pro</h3>
                         <p style="margin-bottom: 1rem;">For professionals who live in their inbox.</p>
-                        <div style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 1.5rem;">$29<span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/month</span></div>
+                        <div style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 1.5rem;">$19<span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/month</span></div>
                         <ul class="check-list" style="margin-bottom: auto;">
                             <li>Unlimited email actions</li>
                             <li>AI draft replies</li>
                             <li>Follow-up scheduling</li>
                             <li>Thread summaries</li>
                             <li>Priority flagging</li>
+                            <li>Email rules & automations</li>
                             <li>Priority support</li>
                         </ul>
-                        <a href="/auth/google" class="btn btn-primary btn-connect" style="width: 100%; margin-top: 2rem;">Start Pro Trial →</a>
-                        <a href="/static/dashboard.html" class="btn btn-primary btn-dashboard" style="width: 100%; margin-top: 2rem;">Open Dashboard</a>
+                        <a href="/auth/google" class="btn btn-primary btn-connect" style="width: 100%; margin-top: 2rem;" onclick="sessionStorage.setItem('pending_plan','pro_monthly')">Start Pro Trial →</a>
+                        <a href="#" class="btn btn-primary btn-dashboard" style="width: 100%; margin-top: 2rem;" onclick="upgradePlan('pro_monthly')">Upgrade to Pro →</a>
                     </div>
                 </div>
 
@@ -345,7 +346,7 @@
                         <div style="margin-bottom: 1rem; font-family: 'Roboto Mono'; font-size: 0.8rem; color: var(--text-muted);">TEAMS</div>
                         <h3>Business</h3>
                         <p style="margin-bottom: 1rem;">For teams that need full control.</p>
-                        <div style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 1.5rem;">$99<span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/month</span></div>
+                        <div style="font-size: 2.5rem; font-weight: 700; color: #fff; margin-bottom: 1.5rem;">$49<span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400;">/user/month</span></div>
                         <ul class="check-list" style="margin-bottom: auto;">
                             <li>Everything in Pro</li>
                             <li>Multi-inbox support</li>
@@ -354,7 +355,8 @@
                             <li>Analytics dashboard</li>
                             <li>Dedicated support</li>
                         </ul>
-                        <a href="https://calendly.com/admin-autominds/30min" class="btn btn-secondary" style="width: 100%; margin-top: 2rem;">Contact Sales</a>
+                        <a href="https://calendly.com/admin-autominds/30min" class="btn btn-secondary btn-connect" style="width: 100%; margin-top: 2rem;">Contact Sales</a>
+                        <a href="#" class="btn btn-secondary btn-dashboard" style="width: 100%; margin-top: 2rem;" onclick="upgradePlan('business_monthly')">Upgrade to Business</a>
                     </div>
                 </div>
             </div>
@@ -449,6 +451,40 @@
                 const userId = localStorage.getItem('autominds_user_id');
                 if (userId) {
                     document.body.classList.add('logged-in');
+                }
+            })();
+
+            async function upgradePlan(plan) {
+                try {
+                    const res = await fetch('/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ plan: plan })
+                    });
+                    if (res.status === 401) {
+                        // Not logged in — save intent and redirect to OAuth
+                        sessionStorage.setItem('pending_plan', plan);
+                        window.location.href = '/auth/google';
+                        return;
+                    }
+                    const data = await res.json();
+                    if (data.checkout_url) {
+                        window.location.href = data.checkout_url;
+                    } else {
+                        alert(data.detail || 'Could not start checkout. Please try again.');
+                    }
+                } catch (e) {
+                    alert('Error starting checkout: ' + e.message);
+                }
+            }
+
+            // Handle post-OAuth upgrade intent
+            (function() {
+                const pending = sessionStorage.getItem('pending_plan');
+                const userId = localStorage.getItem('autominds_user_id');
+                if (pending && userId) {
+                    sessionStorage.removeItem('pending_plan');
+                    upgradePlan(pending);
                 }
             })();
         </script>

@@ -60,6 +60,19 @@
     </nav>
 
     <div class="sidebar-bottom">
+        <!-- Plan Status -->
+        <div class="plan-status" id="plan-status">
+            <div class="plan-status-header">
+                <span class="plan-badge" id="plan-badge">FREE</span>
+                <span class="plan-usage" id="plan-usage">0 / 50 actions</span>
+            </div>
+            <div class="plan-bar-track">
+                <div class="plan-bar-fill" id="plan-bar-fill" style="width: 0%"></div>
+            </div>
+            <button class="btn-upgrade" id="btn-upgrade" onclick="handleUpgrade()">Upgrade to Pro — $19/mo</button>
+            <button class="btn-manage-billing hidden" id="btn-manage-billing" onclick="manageBilling()">Manage Billing</button>
+        </div>
+
         <div class="user-row">
             <div class="user-avatar" id="user-avatar">?</div>
             <div>

@@ -99,6 +99,92 @@ function logout() {
     window.location.href = '/auth/logout';
 }
 
+// ── Billing / Plan Status ──
+let userTier = 'free';
+let actionsUsed = 0;
+let actionsLimit = 50;
+
+async function loadPlanStatus() {
+    try {
+        const res = await fetch(`${API_BASE}/billing/status`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        userTier = data.tier || 'free';
+        actionsUsed = data.actions_used || 0;
+        actionsLimit = data.actions_limit || 50;
+        updatePlanUI();
+    } catch (e) { /* silent — plan status is non-critical */ }
+}
+
+function updatePlanUI() {
+    const badge = document.getElementById('plan-badge');
+    const usage = document.getElementById('plan-usage');
+    const bar = document.getElementById('plan-bar-fill');
+    const btnUpgrade = document.getElementById('btn-upgrade');
+    const btnManage = document.getElementById('btn-manage-billing');
+
+    if (!badge) return;
+
+    // Badge
+    badge.textContent = userTier.toUpperCase();
+    badge.className = 'plan-badge ' + userTier;
+
+    // Usage
+    if (actionsLimit === -1) {
+        usage.textContent = `${actionsUsed} actions (unlimited)`;
+        bar.style.width = '0%';
+        bar.classList.remove('warning');
+    } else {
+        usage.textContent = `${actionsUsed} / ${actionsLimit} actions`;
+        const pct = Math.min((actionsUsed / actionsLimit) * 100, 100);
+        bar.style.width = pct + '%';
+        if (pct > 80) bar.classList.add('warning');
+        else bar.classList.remove('warning');
+    }
+
+    // Buttons
+    if (userTier === 'free') {
+        btnUpgrade.classList.remove('hidden');
+        btnManage.classList.add('hidden');
+    } else {
+        btnUpgrade.classList.add('hidden');
+        btnManage.classList.remove('hidden');
+    }
+}
+
+async function handleUpgrade() {
+    try {
+        const res = await fetch(`${API_BASE}/checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ plan: 'pro_monthly' })
+        });
+        const data = await res.json();
+        if (data.checkout_url) {
+            window.location.href = data.checkout_url;
+        } else {
+            alert(data.detail || 'Could not start checkout');
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function manageBilling() {
+    try {
+        const res = await fetch(`${API_BASE}/billing/portal`, { credentials: 'include' });
+        const data = await res.json();
+        if (data.portal_url) {
+            window.location.href = data.portal_url;
+        } else {
+            alert(data.detail || 'Could not open billing portal');
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
 // ── Chat ──
 function addMsg(sender, text, isUser) {
     const c = document.getElementById('chat-messages');
@@ -463,6 +549,20 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!inboxLoaded) {
                 loadEmails();
                 inboxLoaded = true;
+            }
+            // Load plan status for sidebar
+            loadPlanStatus();
+            // Check for post-upgrade redirect
+            if (window.location.search.includes('upgraded=true')) {
+                loadPlanStatus();
+                alert('🎉 Welcome to Pro! Your plan is now active.');
+                window.history.replaceState({}, '', '/dashboard');
+            }
+            // Handle pending plan upgrade from landing page
+            const pendingPlan = sessionStorage.getItem('pending_plan');
+            if (pendingPlan) {
+                sessionStorage.removeItem('pending_plan');
+                handleUpgrade();
             }
             return fetch(`${API_BASE}/ami/knowledge/status/${userId}`);
         })

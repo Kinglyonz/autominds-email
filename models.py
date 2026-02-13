@@ -147,7 +147,12 @@ class User(BaseModel):
     name: str = ""
     connected_accounts: list[ConnectedAccount] = []
     settings: UserSettings = UserSettings()
-    tier: str = "free"  # free | starter | pro
+    tier: str = "free"  # free | pro | business
+    stripe_customer_id: Optional[str] = None
+    subscription_id: Optional[str] = None
+    plan_expires_at: Optional[datetime] = None
+    actions_used: int = 0
+    actions_reset_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_active: Optional[datetime] = None
 

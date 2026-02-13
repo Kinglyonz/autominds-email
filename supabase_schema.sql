@@ -11,10 +11,22 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     name TEXT DEFAULT '',
     tier TEXT DEFAULT 'free',
+    stripe_customer_id TEXT,
+    subscription_id TEXT,
+    plan_expires_at TIMESTAMPTZ,
+    actions_used INTEGER DEFAULT 0,
+    actions_reset_at TIMESTAMPTZ,
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT now(),
     last_active TIMESTAMPTZ
 );
+
+-- Add billing columns if table already exists
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS actions_used INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS actions_reset_at TIMESTAMPTZ;
 
 -- ═══════════════════════════════════════════════════════════
 -- CONNECTED ACCOUNTS (OAuth tokens for Gmail/Outlook)

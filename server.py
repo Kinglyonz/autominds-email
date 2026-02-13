@@ -8,6 +8,7 @@ Run: uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 import html
 import json as _json
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -353,11 +354,18 @@ async def auth_check(request: Request):
     if not user:
         request.session.clear()
         return JSONResponse({"authenticated": False}, status_code=401)
+    # Plan limits
+    plan_limits = {"free": 50, "pro": -1, "business": -1}
+    limit = plan_limits.get(user.tier, 50)
     return {
         "authenticated": True,
         "user_id": user.id,
         "email": user.email,
         "name": user.name,
+        "tier": user.tier,
+        "actions_used": user.actions_used,
+        "actions_limit": limit,
+        "stripe_customer_id": user.stripe_customer_id,
     }
 
 
@@ -366,6 +374,206 @@ async def auth_logout(request: Request):
     """Clear session and redirect to landing page."""
     request.session.clear()
     return RedirectResponse("/")
+
+
+# ══════════════════════════════════════════════════════════
+# STRIPE BILLING ROUTES
+# ══════════════════════════════════════════════════════════
+
+import stripe as stripe_sdk
+
+stripe_sdk.api_key = settings.stripe_secret_key
+
+# Price IDs — create these in Stripe Dashboard > Products
+# Set via env vars or update here after creating in Stripe
+STRIPE_PRICE_IDS = {
+    "pro_monthly": os.environ.get("STRIPE_PRICE_PRO_MONTHLY", ""),
+    "pro_yearly": os.environ.get("STRIPE_PRICE_PRO_YEARLY", ""),
+    "business_monthly": os.environ.get("STRIPE_PRICE_BUSINESS_MONTHLY", ""),
+}
+
+
+@app.post("/checkout")
+async def create_checkout_session(request: Request):
+    """Create a Stripe Checkout session for subscription."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated — sign in first")
+
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    body = await request.json()
+    plan = body.get("plan", "pro_monthly")
+    price_id = STRIPE_PRICE_IDS.get(plan)
+    if not price_id:
+        raise HTTPException(status_code=400, detail=f"Unknown plan: {plan}")
+
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+
+    try:
+        # Get or create Stripe Customer
+        if user.stripe_customer_id:
+            customer_id = user.stripe_customer_id
+        else:
+            customer = stripe_sdk.Customer.create(
+                email=user.email,
+                name=user.name,
+                metadata={"autominds_user_id": user.id},
+            )
+            customer_id = customer.id
+            user.stripe_customer_id = customer_id
+            user_store.save_user(user)
+
+        # Determine base URL
+        base_url = "https://autominds.org"
+        if settings.app_env == "development":
+            base_url = "http://localhost:8000"
+
+        session = stripe_sdk.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            line_items=[{"price": price_id, "quantity": 1}],
+            mode="subscription",
+            success_url=f"{base_url}/dashboard?upgraded=true",
+            cancel_url=f"{base_url}/dashboard?cancelled=true",
+            metadata={"autominds_user_id": user.id, "plan": plan},
+        )
+
+        return {"checkout_url": session.url, "session_id": session.id}
+
+    except stripe_sdk.error.StripeError as e:
+        logger.error(f"Stripe checkout error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events for subscription lifecycle."""
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    if not settings.stripe_webhook_secret:
+        logger.warning("Stripe webhook secret not configured")
+        raise HTTPException(status_code=500, detail="Webhook not configured")
+
+    try:
+        event = stripe_sdk.Webhook.construct_event(
+            payload, sig_header, settings.stripe_webhook_secret
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe_sdk.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    event_type = event["type"]
+    data = event["data"]["object"]
+    logger.info(f"Stripe webhook: {event_type}")
+
+    if event_type == "checkout.session.completed":
+        # Subscription started
+        customer_id = data.get("customer")
+        user_id = data.get("metadata", {}).get("autominds_user_id")
+        plan = data.get("metadata", {}).get("plan", "pro_monthly")
+        subscription_id = data.get("subscription")
+
+        tier = "pro" if "pro" in plan else "business"
+
+        if user_id:
+            user = user_store.get_user(user_id)
+            if user:
+                user.tier = tier
+                user.stripe_customer_id = customer_id
+                user.subscription_id = subscription_id
+                user.actions_used = 0  # Reset on upgrade
+                user_store.save_user(user)
+                logger.info(f"User {user_id} upgraded to {tier}")
+
+    elif event_type in ("customer.subscription.updated", "customer.subscription.renewed"):
+        # Subscription renewed or changed
+        customer_id = data.get("customer")
+        status = data.get("status")
+        subscription_id = data.get("id")
+
+        users = user_store.list_all_users()
+        user = next((u for u in users if u.stripe_customer_id == customer_id), None)
+        if user:
+            if status == "active":
+                user.subscription_id = subscription_id
+                user.actions_used = 0  # Reset on renewal
+                user_store.save_user(user)
+                logger.info(f"Subscription renewed for user {user.id}")
+
+    elif event_type in ("customer.subscription.deleted", "customer.subscription.paused"):
+        # Subscription cancelled or paused — downgrade to free
+        customer_id = data.get("customer")
+
+        users = user_store.list_all_users()
+        user = next((u for u in users if u.stripe_customer_id == customer_id), None)
+        if user:
+            user.tier = "free"
+            user.subscription_id = None
+            user_store.save_user(user)
+            logger.info(f"User {user.id} downgraded to free (subscription ended)")
+
+    elif event_type == "invoice.payment_failed":
+        # Payment failed — log but don't immediately downgrade (Stripe retries)
+        customer_id = data.get("customer")
+        logger.warning(f"Payment failed for customer {customer_id}")
+
+    return {"status": "ok"}
+
+
+@app.get("/billing/portal")
+async def billing_portal(request: Request):
+    """Create a Stripe Customer Portal session for managing subscription."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = user_store.get_user(user_id)
+    if not user or not user.stripe_customer_id:
+        raise HTTPException(status_code=400, detail="No billing account found")
+
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+
+    base_url = "https://autominds.org" if settings.app_env != "development" else "http://localhost:8000"
+
+    try:
+        session = stripe_sdk.billing_portal.Session.create(
+            customer=user.stripe_customer_id,
+            return_url=f"{base_url}/dashboard",
+        )
+        return {"portal_url": session.url}
+    except stripe_sdk.error.StripeError as e:
+        logger.error(f"Stripe portal error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/billing/status")
+async def billing_status(request: Request):
+    """Get the current user's billing/plan status."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = user_store.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    plan_limits = {"free": 50, "pro": -1, "business": -1}
+    limit = plan_limits.get(user.tier, 50)
+
+    return {
+        "tier": user.tier,
+        "actions_used": user.actions_used,
+        "actions_limit": limit,
+        "has_subscription": bool(user.subscription_id),
+        "stripe_customer_id": user.stripe_customer_id,
+    }
 
 
 # ══════════════════════════════════════════════════════════
